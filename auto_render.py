@@ -87,7 +87,7 @@ for i in range(10):
 
     # roughness randomization
     shader_node.inputs["Subsurface Weight"].default_value = random.uniform(
-        0.0, 0.05)  # NOT (0.1, 0.4)
+        0.0, 0.05)
     shader_node.inputs["Roughness"].default_value = random.uniform(0.3, 0.5)
 
     # random camera position
