@@ -4,12 +4,16 @@ import os
 import math
 
 
+SAMPLES_NUMBER = 1
+X_RES = 640
+Y_RES = 480
+IS_OCLUSSION_ENABLE = True
 # set the proper engine
 bpy.context.scene.render.engine = 'CYCLES'
 bpy.context.scene.cycles.device = 'GPU'
 bpy.context.scene.cycles.samples = 128
-bpy.context.scene.render.resolution_x = 640
-bpy.context.scene.render.resolution_y = 480
+bpy.context.scene.render.resolution_x = X_RES
+bpy.context.scene.render.resolution_y = Y_RES
 bpy.context.scene.view_settings.look = 'AgX - High Contrast'
 
 # set the active models
@@ -54,6 +58,16 @@ camera.constraints['Track To'].target = active_model
 camera.constraints['Track To'].track_axis = 'TRACK_NEGATIVE_Z'
 camera.constraints['Track To'].up_axis = 'UP_Y'
 
+if IS_OCLUSSION_ENABLE:
+    bpy.ops.mesh.primitive_plane_add(size=1)
+    occluder = bpy.context.active_object
+    occluder.name = "Occluder"
+
+    mat_occ = bpy.data.materials.new(name="OccluderMaterial")
+    occluder.data.materials.append(mat_occ)
+    mat_occ.use_nodes = True
+    shader_occ = mat_occ.node_tree.nodes.get("Principled BSDF")
+
 
 # nodes
 background_node = nodes.new(type='ShaderNodeBackground')
@@ -74,7 +88,7 @@ node_tree.links.new(
     background_node.outputs['Background'], output_node.inputs['Surface'])
 
 
-for i in range(10):
+for i in range(SAMPLES_NUMBER):
 
     # load a random image
     img_path = os.path.join(backgrounds_path, random.choice(backgrounds))
@@ -105,6 +119,20 @@ for i in range(10):
     # 3. Set the camera's location
     camera.location = (cam_x, cam_y, cam_z)
 
+    # occluder randomization
+    if IS_OCLUSSION_ENABLE:
+        # e.g., 20% to 60% of the way to the camera
+        t = random.uniform(0.2, 0.6)
+        # t = random.uniform(0.2, 0)
+        occluder.location = camera.location * t
+        occ_size = max_dimension * random.uniform(0.5, 1.5)
+        occluder.scale = (occ_size, occ_size, 1)
+
+        # Random color and material
+        shader_occ.inputs["Base Color"].default_value = (
+            random.random(), random.random(), random.random(), 1)
+        shader_occ.inputs["Roughness"].default_value = random.uniform(0.1, 0.9)
+
     print({f'Generating images, current: {i}'})
     # rotate the model randomly
     active_model.rotation_euler.x = random.uniform(0, 2 * math.pi)
@@ -113,5 +141,10 @@ for i in range(10):
     mapping_node.inputs['Rotation'].default_value[2] = random.uniform(
         0, math.pi * 2)
 
-    bpy.context.scene.render.filepath = f"/Users/caiofeuser/Documents/inspire/renders/D{active_model.name}-{i}-v5.png"
+    bpy.context.scene.render.filepath = f"/Users/caiofeuser/Documents/inspire/renders/D{active_model.name}-{i}-v7.png"
+    bpy.context.view_layer.objects.active = active_model
     bpy.ops.render.render(write_still=True)
+
+if IS_OCLUSSION_ENABLE:
+    objs = bpy.data.objects
+    objs.remove(objs["Occluder"], do_unlink=True)
