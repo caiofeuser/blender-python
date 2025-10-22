@@ -1,13 +1,17 @@
-﻿import random
-import bpy
-import os
+﻿import json
 import math
+import os
+import random
 
+import bpy
+from bpy_extras.object_utils import world_to_camera_view
+from mathutils import Vector
 
-SAMPLES_NUMBER = 1
+SAMPLES_NUMBER = 2
 X_RES = 640
 Y_RES = 480
-IS_OCLUSSION_ENABLE = True
+IS_OCLUSSION_ENABLE = False
+
 # set the proper engine
 bpy.context.scene.render.engine = 'CYCLES'
 bpy.context.scene.cycles.device = 'GPU'
@@ -38,7 +42,8 @@ backgrounds = os.listdir(backgrounds_path)
 
 
 # set up world enviroment
-world = bpy.context.scene.world
+scene = bpy.context.scene
+world = scene.world
 world.use_nodes = True
 node_tree = world.node_tree
 nodes = node_tree.nodes
@@ -86,6 +91,8 @@ node_tree.links.new(
     env_texture_node.outputs['Color'], background_node.inputs['Color'])
 node_tree.links.new(
     background_node.outputs['Background'], output_node.inputs['Surface'])
+
+export_json = []
 
 
 for i in range(SAMPLES_NUMBER):
@@ -141,9 +148,66 @@ for i in range(SAMPLES_NUMBER):
     mapping_node.inputs['Rotation'].default_value[2] = random.uniform(
         0, math.pi * 2)
 
-    bpy.context.scene.render.filepath = f"/Users/caiofeuser/Documents/inspire/renders/D{active_model.name}-{i}-v7.png"
+    # update the matrix_world from the last shot
+    bpy.context.view_layer.update()
+
+    actv_obj_bb = active_model.bound_box
+    matrix_world = active_model.matrix_world
+
+    global_coordinates = [matrix_world @ Vector(crd) for crd in actv_obj_bb]
+
+    normalized_coordinates = [
+        world_to_camera_view(scene=scene, obj=camera, coord=axis)
+        for axis in global_coordinates
+    ]
+
+    visible_coordinates = [
+        coord for coord in normalized_coordinates if coord.z > 0]
+
+    x_values = [vector.x for vector in visible_coordinates]
+    y_values = [vector.y for vector in visible_coordinates]
+
+    min_x = min(x_values)
+    max_x = max(x_values)
+    min_y = min(y_values)
+    max_y = max(y_values)
+
+    denormalized_min_x = min_x * X_RES
+    denormalized_min_y = min_y * Y_RES
+    denormalized_max_x = max_x * X_RES
+    denormalized_max_y = max_y * Y_RES
+
+    width = denormalized_max_x - denormalized_min_x
+    height = denormalized_max_y - denormalized_min_y
+
+    print({
+        "x": denormalized_min_x,
+        "width": width,
+        "y": denormalized_min_y,
+        "height": height
+    })
+
+    file_name = f"TesteBoundingBoxesD{active_model.name}-{i}-v7.png"
+    file_path = f"/Users/caiofeuser/Documents/inspire/renders/{file_name}"
+
+    bpy.context.scene.render.filepath = file_path
     bpy.context.view_layer.objects.active = active_model
     bpy.ops.render.render(write_still=True)
+
+    bb_data = {
+        "min_x": min_x,
+        "max_x": max_x,
+        "min_y": min_y,
+        "max_y": max_y,
+        "file_path": file_path,
+        "file_name": file_name
+    }
+
+    export_json.append(bb_data)
+
+with open('bb.json', 'w') as f:
+    json.dump(export_json, f)
+
 
 if IS_OCLUSSION_ENABLE:
     objs = bpy.data.objects
