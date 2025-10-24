@@ -1,6 +1,8 @@
 ﻿.DS_Store
 venv
 bb.json
-/renders
-/models
-/backgrounds
+renders/*
+models/*
+backgrounds/*
+
+!.gitkeep
