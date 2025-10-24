@@ -7,9 +7,8 @@ import uuid
 
 import bpy
 from bpy_extras.object_utils import world_to_camera_view
-from mathutils import Vector
 
-SAMPLES_NUMBER = 2
+SAMPLES_NUMBER = 3
 X_RES = 640
 Y_RES = 480
 IS_OCLUSSION_ENABLE = True
@@ -31,6 +30,11 @@ bpy.context.scene.view_settings.look = 'AgX - High Contrast'
 
 # load a random background
 backgrounds = os.listdir(BACKGROUND_PATH)
+filered_backgrounds = []
+
+for file in backgrounds:
+    if file.endswith('.exr'):
+        filered_backgrounds.append(file)
 
 # set up world enviroment
 scene = bpy.context.scene
@@ -152,7 +156,8 @@ for model in models:
     for i in range(SAMPLES_NUMBER):
 
         # load random background
-        img_path = os.path.join(BACKGROUND_PATH, random.choice(backgrounds))
+        img_path = os.path.join(
+            BACKGROUND_PATH, random.choice(filered_backgrounds))
         img = bpy.data.images.load(img_path)
         env_texture_node.image = img
 
@@ -184,7 +189,7 @@ for model in models:
 
         # occluder randomization
         if IS_OCLUSSION_ENABLE:
-            if random.random() > 0.5:
+            if random.random() > 0.0:
                 occluder.hide_render = False
 
                 t = random.uniform(0.2, 0.4)
@@ -229,11 +234,11 @@ for model in models:
         # update the matrix_world from the last shot
         bpy.context.view_layer.update()
 
-        actv_obj_bb = active_model.bound_box
+        mesh_vertices = [v.co for v in active_model.data.vertices]
         matrix_world = active_model.matrix_world
 
-        global_coordinates = [matrix_world @
-                              Vector(crd) for crd in actv_obj_bb]
+        # Apply the global transformation to EVERY vertex
+        global_coordinates = [matrix_world @ v for v in mesh_vertices]
 
         normalized_coordinates = [
             world_to_camera_view(scene=scene, obj=camera, coord=axis)
@@ -288,3 +293,5 @@ for model in models:
 
 with open('bb.json', 'w') as f:
     json.dump(export_json, f)
+
+print("------- finished -------")
