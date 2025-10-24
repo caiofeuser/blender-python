@@ -1,3 +1,6 @@
 ﻿.DS_Store
 venv
 bb.json
+/renders
+/models
+/backgrounds

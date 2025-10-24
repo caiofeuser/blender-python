@@ -2,20 +2,28 @@
 import math
 import os
 import random
+import uuid
+
 
 import bpy
 from bpy_extras.object_utils import world_to_camera_view
 from mathutils import Vector
 
-SAMPLES_NUMBER = 3
+SAMPLES_NUMBER = 1
 X_RES = 640
 Y_RES = 480
 IS_OCLUSSION_ENABLE = False
-
+BACKGROUND_PATH = './backgrounds'
+MODELS_PATH = "./models"
+RENDERS_PATH = './renders'
+USE_GPU = True
+CYCLES = 128
+ENGINE = 'CYCLES'
+export_json = []
 # set the proper engine
-bpy.context.scene.render.engine = 'CYCLES'
-bpy.context.scene.cycles.device = 'GPU'
-bpy.context.scene.cycles.samples = 128
+bpy.context.scene.render.engine = ENGINE
+bpy.context.scene.cycles.device = 'GPU' if USE_GPU else 'CPU'
+bpy.context.scene.cycles.samples = CYCLES
 bpy.context.scene.render.resolution_x = X_RES
 bpy.context.scene.render.resolution_y = Y_RES
 bpy.context.scene.view_settings.look = 'AgX - High Contrast'
@@ -37,8 +45,7 @@ max_dimension = max(object_dimens)
 
 
 # load a random background
-backgrounds_path = '/Users/caiofeuser/Documents/inspire/backgrounds'
-backgrounds = os.listdir(backgrounds_path)
+backgrounds = os.listdir(BACKGROUND_PATH)
 
 
 # set up world enviroment
@@ -92,13 +99,11 @@ node_tree.links.new(
 node_tree.links.new(
     background_node.outputs['Background'], output_node.inputs['Surface'])
 
-export_json = []
-
 
 for i in range(SAMPLES_NUMBER):
 
     # load a random image
-    img_path = os.path.join(backgrounds_path, random.choice(backgrounds))
+    img_path = os.path.join(BACKGROUND_PATH, random.choice(backgrounds))
     img = bpy.data.images.load(img_path)
     env_texture_node.image = img
     print('Loaded image:', img_path)
@@ -187,8 +192,8 @@ for i in range(SAMPLES_NUMBER):
         "height": height
     })
 
-    file_name = f"TesteBoundingBoxesD{active_model.name}-{i}-v7.png"
-    file_path = f"/Users/caiofeuser/Documents/inspire/renders/{file_name}"
+    file_name = f"{active_model.name}-{uuid.uuid4()}-v10.png"
+    file_path = f"{RENDERS_PATH}/{file_name}"
 
     bpy.context.scene.render.filepath = file_path
     bpy.context.view_layer.objects.active = active_model
@@ -200,7 +205,8 @@ for i in range(SAMPLES_NUMBER):
         "min_y": min_y,
         "max_y": max_y,
         "file_path": file_path,
-        "file_name": file_name
+        "file_name": file_name,
+        "model_name": active_model.name
     }
 
     export_json.append(bb_data)
