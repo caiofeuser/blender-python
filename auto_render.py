@@ -7,7 +7,7 @@ import bpy
 from bpy_extras.object_utils import world_to_camera_view
 from mathutils import Vector
 
-SAMPLES_NUMBER = 2
+SAMPLES_NUMBER = 3
 X_RES = 640
 Y_RES = 480
 IS_OCLUSSION_ENABLE = False
