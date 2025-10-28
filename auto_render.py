@@ -8,7 +8,7 @@ import uuid
 import bpy
 from bpy_extras.object_utils import world_to_camera_view
 
-SAMPLES_NUMBER = 3
+SAMPLES_NUMBER = 400
 X_RES = 640
 Y_RES = 480
 IS_OCLUSSION_ENABLE = True
@@ -186,10 +186,12 @@ for model in models:
 
         # 3. Set the camera's location
         camera.location = (cam_x, cam_y, cam_z)
-
+        occluder.hide_render = True
         # occluder randomization
         if IS_OCLUSSION_ENABLE:
-            if random.random() > 0.0:
+            randomChangeOclusion = random.uniform(0, 1)
+            print(f'random chance =========== => {randomChangeOclusion}')
+            if randomChangeOclusion > 0.5:
                 occluder.hide_render = False
 
                 t = random.uniform(0.2, 0.4)
@@ -271,6 +273,7 @@ for model in models:
         bpy.context.view_layer.objects.active = active_model
         bpy.ops.render.render(write_still=True)
 
+        # @TODO: fix model_name to prevent pos-processing to train YOLO
         bb_data = {
             "min_x": min_x,
             "max_x": max_x,
