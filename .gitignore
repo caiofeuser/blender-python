@@ -4,7 +4,10 @@ bb.json
 renders/*
 models/*
 backgrounds/*
-labels/*
+labels/
 *.json
+*.png
+*.txt
+
 
 !.gitkeep

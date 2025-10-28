@@ -1,4 +1,3 @@
-import os
 import json
 
 with open("classes.json") as f:
@@ -22,5 +21,5 @@ for item in data:
 
     print(export_string)
 
-    with open(f'./labels/{img_name}.txt', 'w') as f:
+    with open(f'./labels/{img_name.replace("png", "txt")}', 'w') as f:
         f.write(export_string)

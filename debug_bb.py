@@ -3,7 +3,7 @@ import matplotlib.patches as ptc
 import matplotlib.pyplot as plt
 from PIL import Image
 
-with open("bb.json") as f:
+with open("fixed_bb.json") as f:
     data = json.load(f)
 
 for render in data:
