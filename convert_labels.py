@@ -10,8 +10,8 @@ with open("bb_fixed.json") as f:
 export_json = []
 
 for item in data:
-    width = item['min_x'] - item['max_x']
-    heigth = item['min_y'] - item['max_y']
+    width = item['max_x'] - item['min_x']
+    heigth = item['max_y'] - item['min_y']
     center_x = item['max_x'] - width / 2
     center_y = item['max_y'] - heigth / 2
     model_name = item['model_name']
