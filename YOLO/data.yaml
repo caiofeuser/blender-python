@@ -1,11 +1,11 @@
-path: /Users/caiofeuser/Developer/inspire/auto_render/YOLO/dataset
+path: /content/YOLO/dataset
 
 train: images/train
 val: images/val
 
 names:
-  0: spacer
-  1: head
+  0: armleft
+  1: armright
   2: base
-  3: armleft
-  4: armright
+  3: head
+  4: spacer
