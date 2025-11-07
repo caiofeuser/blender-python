@@ -8,7 +8,7 @@ import uuid
 import bpy
 from bpy_extras.object_utils import world_to_camera_view
 
-SAMPLES_NUMBER = 5
+SAMPLES_NUMBER = 10
 X_RES = 640
 Y_RES = 480
 BACKGROUND_SAMPLES = int(SAMPLES_NUMBER*0.25)
@@ -18,8 +18,8 @@ MODELS_PATH = "./models"
 RENDERS_PATH = './renders'
 USE_GPU = True
 CYCLES = 128
-# ENGINE = 'CYCLES'
-ENGINE = 'BLENDER_EEVEE_NEXT'
+ENGINE = 'CYCLES'
+# ENGINE = 'BLENDER_EEVEE_NEXT'
 
 
 # set the proper engine
@@ -118,7 +118,8 @@ def get_2d_bounding_box(obj, scene, cam):
 
 def denormalize_coord(x1, x2, y1, y2):
     """"
-    Denormalize the bounding box coordinates from (0-1) to pixel values based on the render resolution."""
+    Denormalize the bounding box coordinates from (0-1) to pixel values based
+    on the render resolution."""
     denormalized_min_x = x1 * X_RES
     denormalized_min_y = y1 * Y_RES
     denormalized_max_x = x2 * X_RES
@@ -205,7 +206,8 @@ def remove_occluder():
 def camera_positioning():
     # random camera position
     # 1. Pick random spherical coordinates
-    # ideally the more furthest distance would rely in the object size, but for the arms shots it's not
+    # ideally the more furthest distance would rely in the object size,
+    # but for the arms shots it's not
     trashhold_camera_distance = 100
     min_camera_distance = max_dimension * 3
     max_calculated_distance = max_dimension * 30
@@ -470,7 +472,7 @@ for model in models:
     bpy.data.objects.remove(active_model, do_unlink=True)
 
 
-# Generate pure background images so we prevent so meuch false positives during training
+# Generate pure background images so we prevent false positives during training
 for background_sample in range(0, BACKGROUND_SAMPLES):
     camera.constraints.clear()
     # Random rotation for the camera in all axes
