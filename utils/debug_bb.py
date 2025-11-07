@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from matplotlib.widgets import Slider
 
-with open("bb_fixed_with_bg.json") as f:
+with open("bb.json") as f:
     data = json.load(f)
 
 
