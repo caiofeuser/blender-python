@@ -8,6 +8,6 @@ labels/
 *.json
 *.png
 *.txt
-
+__pycache__
 
 !.gitkeep
