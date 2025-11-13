@@ -10,13 +10,13 @@ import bpy
 from bpy_extras.object_utils import world_to_camera_view
 
 
-SAMPLES_NUMBER = 5000  # number os samples to be generated
+SAMPLES_NUMBER = 20  # number os samples to be generated
 # x and y resolution
 X_RES = 640
 Y_RES = 480
 
 # number of background samples to be generated based on the total samples
-BACKGROUND_SAMPLES = int(SAMPLES_NUMBER*0.05)
+BACKGROUND_SAMPLES = int(SAMPLES_NUMBER*0.5)
 
 IS_OCLUSSION_ENABLE = True  # occlusion toggle
 
@@ -572,10 +572,7 @@ for background_sample in range(0, BACKGROUND_SAMPLES):
         "file_path": file_path,
         "file_name": file_name,
         "model_name": "background",
-        "min_x": None,
-        "max_x": None,
-        "min_y": None,
-        "max_y": None,
+        "bboxes": [],
     }
 
     export_json.append(background_data)

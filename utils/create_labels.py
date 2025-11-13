@@ -1,7 +1,7 @@
 import json
 
 
-def __main__():
+def process_labels():
     with open("classes.json") as f:
         classes = json.load(f)
 
@@ -9,15 +9,22 @@ def __main__():
         data = json.load(f)
 
     for item in data:
-        if item['model_name'] != 'background':
-            width = item['max_x'] - item['min_x']
-            heigth = item['max_y'] - item['min_y']
-            center_x = item['max_x'] - width / 2
-            center_y = item['max_y'] - heigth / 2
-            model_name = item['model_name']
+        labels = []
+        for bb in item['bboxes']:
+            if bb['model_name'] != 'background':
+                width = bb['max_x'] - bb['min_x']
+                heigth = bb['max_y'] - bb['min_y']
+                center_x = bb['max_x'] - width / 2
+                center_y = bb['max_y'] - heigth / 2
+                model_name = bb['model_name']
 
-            model_class = classes[model_name]
-            export_string = f'{model_class} {center_x} {center_y} {width} {heigth}'
+                model_class = classes[model_name]
+
+                labels.append(
+                    f'{model_class} {center_x} {center_y} {width} {heigth}'
+                )
+        if labels:
+            export_string = "\n".join(labels)
 
         else:
             export_string = ""
@@ -26,3 +33,8 @@ def __main__():
 
         with open(f'./labels/{item['file_name'].replace("png", "txt")}', 'w') as f:
             f.write(export_string)
+
+
+# when we call a file trough terminal, this code will be executed, therfore, we call the main function
+if __name__ == "__main__":
+    process_labels()
