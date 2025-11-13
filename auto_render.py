@@ -3,23 +3,37 @@ import math
 import os
 import random
 import uuid
+from mathutils import Vector
 
 
 import bpy
 from bpy_extras.object_utils import world_to_camera_view
 
-SAMPLES_NUMBER = 10
+
+SAMPLES_NUMBER = 5000  # number os samples to be generated
+# x and y resolution
 X_RES = 640
 Y_RES = 480
-BACKGROUND_SAMPLES = int(SAMPLES_NUMBER*0.25)
-IS_OCLUSSION_ENABLE = True
+
+# number of background samples to be generated based on the total samples
+BACKGROUND_SAMPLES = int(SAMPLES_NUMBER*0.05)
+
+IS_OCLUSSION_ENABLE = True  # occlusion toggle
+
+# file paths
 BACKGROUND_PATH = './backgrounds'
 MODELS_PATH = "./models"
 RENDERS_PATH = './renders'
-USE_GPU = True
-CYCLES = 128
-ENGINE = 'CYCLES'
-# ENGINE = 'BLENDER_EEVEE_NEXT'
+
+# rendering settings
+
+USE_GPU = True  # GPU or CPU rendering
+CYCLES = 128  # number of cycles
+ENGINE = 'CYCLES'  # BLENDER_EEVEE_NEXT or CYCLES
+
+# multi object spawn settings
+MIN_SPAWN_DISTANCE = 1
+MAX_SPAWN_ATTEMPTS = 50
 
 
 # set the proper engine
@@ -141,6 +155,9 @@ def calculate_occlusion(target, occluder, cam, scene):
     target_bb = get_2d_bounding_box(target, scene, cam)
     occluder_bb = get_2d_bounding_box(occluder, scene, cam)
 
+    if not target_bb or not occluder_bb:
+        return 0.0
+
     target_area = (target_bb['max_x'] - target_bb['min_x']) * \
         (target_bb['max_y'] - target_bb['min_y'])
 
@@ -209,8 +226,8 @@ def camera_positioning():
     # ideally the more furthest distance would rely in the object size,
     # but for the arms shots it's not
     trashhold_camera_distance = 100
-    min_camera_distance = max_dimension * 3
-    max_calculated_distance = max_dimension * 30
+    min_camera_distance = max_dimension * 2
+    max_calculated_distance = max_dimension * 25
     max_camera_distance = max_calculated_distance if max_calculated_distance < trashhold_camera_distance else trashhold_camera_distance
 
     distance = random.uniform(
@@ -279,15 +296,15 @@ def load_and_merge_previous_data(new_data):
             if not isinstance(prev_data, list):
                 prev_data = []
 
-        print(f"Loaded {len(prev_data)} previous bounding boxes.")
+        # print(f"Loaded {len(prev_data)} previous bounding boxes.")
 
     except (FileNotFoundError, json.JSONDecodeError):
         # This block runs if the file doesn't exist OR is empty/corrupted
-        print("bb.json not found or is empty. Starting a new one.")
+        # print("bb.json not found or is empty. Starting a new one.")
         prev_data = []
 
     # --- The rest of your code is fine ---
-    print(f"Adding {len(export_json)} new bounding boxes.")
+    # print(f"Adding {len(export_json)} new bounding boxes.")
     export_json.extend(prev_data)
 
     with open('bb.json', 'w') as f:
@@ -313,163 +330,215 @@ node_tree.links.new(
 # list that will be exported to json
 export_json = []
 
-models = [f for f in os.listdir(MODELS_PATH) if f.endswith('.blend')]
-print(f"Found {len(models)} .blend files to process.")
+all_model_files = [f for f in os.listdir(MODELS_PATH) if f.endswith('.blend')]
+# print(f"Found {len(all_model_files)} .blend files to use as models.")
 
-for model in models:
-    print(f"--- Processing file: {model} ---")
-    filepath = os.path.join(MODELS_PATH, model)
+# It runs SAMPLES_NUMBER times, creating one unique scene per loop.
+for i in range(SAMPLES_NUMBER):
+    num_objects = random.gauss(3, 2)
 
-    # load the current blender file
-    appended_objects = []
-    with bpy.data.libraries.load(filepath, link=False) as (data_from, data_to):
-        data_to.objects = data_from.objects
+    num_objects = max(1, int(num_objects))  # At least 1 object
+    num_objects = min(num_objects, 15)      # Cap at 15 objects
+    num_objects = int(num_objects)
 
-    # append the mesh into the scene
-    for obj in data_to.objects:
-        if obj and obj.type == 'MESH':
-            appended_objects.append(obj)
-            scene.collection.objects.link(obj)
+    num_to_sample = min(num_objects, len(all_model_files))
+    models_to_load_paths = random.sample(all_model_files, num_to_sample)
 
-    if not appended_objects:
-        print(f"No MESH objects found in {model}. Skipping.")
+    current_scene_objects = []  # Keep track of objects to delete later
+    all_bb_data_for_this_image = []  # Store all BBs for this one image
+
+    # 3. Load and place all chosen models
+    for model_file in models_to_load_paths:
+        filepath = os.path.join(MODELS_PATH, model_file)
+
+        with bpy.data.libraries.load(filepath, link=False) as (data_from, data_to):
+            data_to.objects = [
+                name for name in data_from.objects if bpy.data.objects.get(name) is None]
+
+        for obj in data_to.objects:
+            if obj and obj.type == 'MESH':
+                obj.scale = (0.066, 0.066, 0.066)
+
+                is_position_safe = False
+                attempts = 0
+
+                while not is_position_safe and attempts < MAX_SPAWN_ATTEMPTS:
+                    attempts += 1
+                    is_position_safe = True  # Assume this spot is good
+
+                    # 1. Get a new random trial position
+                    trial_location = (
+                        random.gauss(5, 10),
+                        random.gauss(5, 10),
+                        random.uniform(0, 2)
+                    )
+
+                    # 2. Check it against all previously placed objects
+                    for placed_obj in current_scene_objects:
+                        distance = (Vector(trial_location) -
+                                    placed_obj.location).length
+
+                        if distance < MIN_SPAWN_DISTANCE:
+                            is_position_safe = False  # This spot is too close
+                            break  # Stop checking, try a new spot
+
+                    # 3. If we looped all objects and it's still safe, we're done
+                    if is_position_safe:
+                        obj.location = trial_location
+                        obj.rotation_euler = (
+                            random.uniform(0, 2 * math.pi),
+                            random.uniform(0, 2 * math.pi),
+                            random.uniform(0, 2 * math.pi)
+                        )
+                        scene.collection.objects.link(obj)
+                        current_scene_objects.append(obj)
+                        break  # Exit the 'while' loop
+
+                if not is_position_safe:
+                    # print(
+                    # f"Warning: Could not find clear spot for {obj.name}. Skipping it.")
+
+                    bpy.data.objects.remove(obj, do_unlink=True)
+
+    if not current_scene_objects:
+        # print("No models were loaded for this scene. Skipping.")
         continue
 
-    # TODO: implement logic fot when we have more then one model per file => Assembly file
-    active_model = appended_objects[0]
-    if len(appended_objects) > 1:
-        print(
-            f"Warning: File has {len(appended_objects)} objects. Only processing {active_model.name}.")
+    # 4. Set up Camera
+    # Let's make it track an Empty at the center of the scene (0,0,0)
 
-    print(f"Processing object: {active_model.name}")
+    # Create or get an Empty at the origin
+    if "SceneCenter" not in bpy.data.objects:
+        bpy.ops.object.empty_add(location=(0, 0, 0))
+        bpy.context.active_object.name = "SceneCenter"
+    scene_center = bpy.data.objects["SceneCenter"]
 
-    # set the active object
-    bpy.context.view_layer.objects.active = active_model
-
-    # set origin to geometry center and the scale
-    set_obj_to_origin(active_model)
-    active_model.scale = (0.066, 0.066, 0.066)
-
-    bpy.context.view_layer.update()  # Make sure dimensions are calculated
-    object_dimens = active_model.dimensions
-    max_dimension = max(object_dimens)
-
-    # get material that should be already applied manually
-    mat = active_model.material_slots[0].material
-    mat.use_nodes = True
-
-    # initial setup of the camera
-    camera.constraints.clear()  # remove any existing constraints on the
+    camera.constraints.clear()
     camera.constraints.new(type='TRACK_TO')
-    camera.constraints['Track To'].target = active_model
+    camera.constraints['Track To'].target = scene_center
     camera.constraints['Track To'].track_axis = 'TRACK_NEGATIVE_Z'
     camera.constraints['Track To'].up_axis = 'UP_Y'
 
-    # nodes
+    # Use the max_dimension of the first object to guide camera distance
+    bpy.context.view_layer.update()
+    object_dimens = current_scene_objects[0].dimensions
+    max_dimension = max(object_dimens)  # Use this for camera_positioning
+
+    camera_positioning()  # Your function should now work fine
+
+    # 5. Set up Lighting
+    # We need to find a shader_node, let's just use the first object's
+    mat = current_scene_objects[0].material_slots[0].material
     shader_node = mat.node_tree.nodes.get("Principled BSDF")
-    index = 0
+    setup_background_and_randomization(background_node, shader_node)
+    mapping_node.inputs['Rotation'].default_value[2] = random.uniform(
+        0, math.pi * 2)
 
-    while index < SAMPLES_NUMBER:
-        # occluder setup
-        occluder = None
-        shader_occ = None
-        # TODO: it's always the same occluder per model
-        if IS_OCLUSSION_ENABLE:
-            occluder = create_random_occluder()
-
-        # setup background and lighting randomization
-        setup_background_and_randomization(background_node, shader_node)
-        # setup the camera position rotation
-        camera_positioning()
-
+    # 6. Set up Occluder (This logic can be mostly the same)
+    occluder = None
+    if IS_OCLUSSION_ENABLE:
+        occluder = create_random_occluder()
         occluder.hide_render = True
-        # occluder randomization
-        if IS_OCLUSSION_ENABLE:
-            randomChangeOclusion = random.uniform(0, 1)
 
-            if randomChangeOclusion > 0.5:
-                occluder.hide_render = False
-                jitter_camera_occluder_position(occluder=occluder)
+        if random.uniform(0, 1) > 0.5:
+            occluder.hide_render = False
+            jitter_camera_occluder_position(occluder=occluder)
 
-                for c in occluder.constraints:
-                    occluder.constraints.remove(c)
+            occ_size = max_dimension * random.uniform(0.2, 0.7)
+            occluder.scale = (occ_size, occ_size, 1)
 
-                track_to = occluder.constraints.new(type='TRACK_TO')
-                track_to.target = camera
-                track_to.track_axis = 'TRACK_NEGATIVE_Z'
-                track_to.up_axis = 'UP_Y'
+    # 7. Get Bounding Boxes for ALL objects
+    bpy.context.view_layer.update()
 
-                occ_size = max_dimension * \
-                    random.uniform(0.2, 0.7)
-                occluder.scale = (occ_size, occ_size, 1)
+    for obj in current_scene_objects:
+        bbox = get_2d_bounding_box(cam=camera, obj=obj, scene=scene)
 
-        print(
-            {f'Generating images, current: {index} of {SAMPLES_NUMBER} from  {model}'})
-        # rotate the model randomly
-        active_model.rotation_euler.x = random.uniform(0, 2 * math.pi)
-        active_model.rotation_euler.y = random.uniform(0, 2 * math.pi)
-        active_model.rotation_euler.z = random.uniform(0, 2 * math.pi)
-        mapping_node.inputs['Rotation'].default_value[2] = random.uniform(
-            0, math.pi * 2)
+        if not bbox:
+            continue  # Object is not visible
 
-        # update the matrix_world from the last shot
-        bpy.context.view_layer.update()
-
-        active_model_coord = get_2d_bounding_box(
-            cam=camera, obj=active_model, scene=scene)
-
-        denorm_coord_values = denormalize_coord(
-            active_model_coord["min_x"],
-            active_model_coord["max_x"],
-            active_model_coord["min_y"],
-            active_model_coord["max_y"]
-        )
-
+        # Check occlusion against the main occluder
         occlusion_percentage = 0.0
-
-        if IS_OCLUSSION_ENABLE and occluder.hide_render == False:
+        if IS_OCLUSSION_ENABLE and not occluder.hide_render:
             occlusion_percentage = calculate_occlusion(
-                target=active_model,
+                target=obj,
                 occluder=occluder,
                 cam=camera,
                 scene=scene
             )
 
-            # if occlusion is too high, skip this render
-            if occlusion_percentage > 0.55:
-                remove_occluder()
-                continue
+        # Skip if the conditions is aren't met
+        if occlusion_percentage > 0.55:
+            # print(
+            # f"Skipping {obj.name}: {occlusion_percentage*100}% occluded.")
+            continue
 
-        index += 1
+        if any(cord < 0 for cord in bbox.values()):
+            # print('Invalid, bounding box for {obj.name}, skipping.')
+            continue
 
-        width = denorm_coord_values["max_x"] - denorm_coord_values["min_x"]
-        height = denorm_coord_values["max_y"] - denorm_coord_values["min_y"]
+        if any(cord == 1 for cord in bbox.values()):
+            # print('Invalid, bounding box for {obj.name}, skipping.')
+            continue
 
-        file_name = f"{active_model.name}-{uuid.uuid4()}.png"
-        file_path = f"{RENDERS_PATH}/{file_name}"
+        height = bbox["max_y"] - bbox["min_y"]
+        width = bbox["max_x"] - bbox["min_x"]
 
-        bpy.context.scene.render.filepath = file_path
-        bpy.context.view_layer.objects.active = active_model
-        bpy.ops.render.render(write_still=True)
+        if width * height < 0.01:
+            # print('Invalid, bounding box too small for {obj.name}, skipping.')
+            continue
 
-        background_data = {
-            "min_x": active_model_coord["min_x"],
-            "max_x": active_model_coord["max_x"],
-            "min_y": active_model_coord["min_y"],
-            "max_y": active_model_coord["max_y"],
-            "file_path": file_path,
-            "file_name": file_name,
-            "model_name": active_model.name,
+        # make all the bb in the same object per image
+        bb_data = {
+            "min_x": bbox["min_x"],
+            "max_x": bbox["max_x"],
+            "min_y": bbox["min_y"],
+            "max_y": bbox["max_y"],
+            "model_name": obj.name.split(".")[0],  # Clean up name
         }
+        print(bb_data)
+        all_bb_data_for_this_image.append(bb_data)
+        print(all_bb_data_for_this_image)
 
-        # print(bb_data)
-        export_json.append(background_data)
+    for obj in current_scene_objects:
+        ...
+        # print(f"Object {obj.name} at {obj.location}")
 
-        # Also delete any other leftover meshes from the append
-        if IS_OCLUSSION_ENABLE:
+        # 8. Render the Scene
+    if not all_bb_data_for_this_image:
+        # print("No objects were visible or passed occlusion. Skipping render.")
+        # Cleanup and continue
+        for obj in current_scene_objects:
+            bpy.data.objects.remove(obj, do_unlink=True)
+        if occluder:
             remove_occluder()
+        continue
 
-    bpy.data.objects.remove(active_model, do_unlink=True)
+    file_name = f"scene-{uuid.uuid4()}.png"
+    file_path = f"{RENDERS_PATH}/{file_name}"
+
+    bpy.context.scene.render.filepath = file_path
+    bpy.ops.render.render(write_still=True)
+
+    # 9. Save all BB data, pointing to the same file
+    # TODO: salve all the same bb in the same object per file so we can make the labels files easier to read
+    # for bb_data in all_bb_data_for_this_image:
+    #     bb_data["file_path"] = file_path
+    #     bb_data["file_name"] = file_name
+    bb_data = {
+        "file_path": file_path,
+        "file_name": file_name,
+        "bboxes": all_bb_data_for_this_image,
+    }
+
+    # print(all_bb_data_for_this_image)
+
+    export_json.append(bb_data)
+
+    # 10. Clean up the scene for the next loop
+    for obj in current_scene_objects:
+        bpy.data.objects.remove(obj, do_unlink=True)
+    if occluder:
+        remove_occluder()
 
 
 # Generate pure background images so we prevent false positives during training
@@ -514,4 +583,4 @@ for background_sample in range(0, BACKGROUND_SAMPLES):
 
 load_and_merge_previous_data(export_json)
 
-print("------- finished -------")
+# print("------- finished -------")
