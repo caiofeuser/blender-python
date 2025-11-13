@@ -296,15 +296,15 @@ def load_and_merge_previous_data(new_data):
             if not isinstance(prev_data, list):
                 prev_data = []
 
-        # print(f"Loaded {len(prev_data)} previous bounding boxes.")
+        print(f"Loaded {len(prev_data)} previous bounding boxes.")
 
     except (FileNotFoundError, json.JSONDecodeError):
         # This block runs if the file doesn't exist OR is empty/corrupted
-        # print("bb.json not found or is empty. Starting a new one.")
+        print("bb.json not found or is empty. Starting a new one.")
         prev_data = []
 
     # --- The rest of your code is fine ---
-    # print(f"Adding {len(export_json)} new bounding boxes.")
+    print(f"Adding {len(export_json)} new bounding boxes.")
     export_json.extend(prev_data)
 
     with open('bb.json', 'w') as f:
@@ -331,7 +331,7 @@ node_tree.links.new(
 export_json = []
 
 all_model_files = [f for f in os.listdir(MODELS_PATH) if f.endswith('.blend')]
-# print(f"Found {len(all_model_files)} .blend files to use as models.")
+print(f"Found {len(all_model_files)} .blend files to use as models.")
 
 # It runs SAMPLES_NUMBER times, creating one unique scene per loop.
 for i in range(SAMPLES_NUMBER):
@@ -395,18 +395,16 @@ for i in range(SAMPLES_NUMBER):
                         break  # Exit the 'while' loop
 
                 if not is_position_safe:
-                    # print(
-                    # f"Warning: Could not find clear spot for {obj.name}. Skipping it.")
+                    print(
+                        f"Warning: Could not find clear spot for {obj.name}. Skipping it.")
 
                     bpy.data.objects.remove(obj, do_unlink=True)
 
     if not current_scene_objects:
-        # print("No models were loaded for this scene. Skipping.")
+        print("No models were loaded for this scene. Skipping.")
         continue
 
     # 4. Set up Camera
-    # Let's make it track an Empty at the center of the scene (0,0,0)
-
     # Create or get an Empty at the origin
     if "SceneCenter" not in bpy.data.objects:
         bpy.ops.object.empty_add(location=(0, 0, 0))
@@ -468,23 +466,23 @@ for i in range(SAMPLES_NUMBER):
 
         # Skip if the conditions is aren't met
         if occlusion_percentage > 0.55:
-            # print(
-            # f"Skipping {obj.name}: {occlusion_percentage*100}% occluded.")
+            print(
+                f"Skipping {obj.name}: {occlusion_percentage*100}% occluded.")
             continue
 
         if any(cord < 0 for cord in bbox.values()):
-            # print('Invalid, bounding box for {obj.name}, skipping.')
+            print('Invalid, bounding box for {obj.name}, skipping.')
             continue
 
         if any(cord == 1 for cord in bbox.values()):
-            # print('Invalid, bounding box for {obj.name}, skipping.')
+            print('Invalid, bounding box for {obj.name}, skipping.')
             continue
 
         height = bbox["max_y"] - bbox["min_y"]
         width = bbox["max_x"] - bbox["min_x"]
 
         if width * height < 0.01:
-            # print('Invalid, bounding box too small for {obj.name}, skipping.')
+            print('Invalid, bounding box too small for {obj.name}, skipping.')
             continue
 
         # make all the bb in the same object per image
@@ -499,13 +497,9 @@ for i in range(SAMPLES_NUMBER):
         all_bb_data_for_this_image.append(bb_data)
         print(all_bb_data_for_this_image)
 
-    for obj in current_scene_objects:
-        ...
-        # print(f"Object {obj.name} at {obj.location}")
-
         # 8. Render the Scene
     if not all_bb_data_for_this_image:
-        # print("No objects were visible or passed occlusion. Skipping render.")
+        print("No objects were visible or passed occlusion. Skipping render.")
         # Cleanup and continue
         for obj in current_scene_objects:
             bpy.data.objects.remove(obj, do_unlink=True)
@@ -520,17 +514,11 @@ for i in range(SAMPLES_NUMBER):
     bpy.ops.render.render(write_still=True)
 
     # 9. Save all BB data, pointing to the same file
-    # TODO: salve all the same bb in the same object per file so we can make the labels files easier to read
-    # for bb_data in all_bb_data_for_this_image:
-    #     bb_data["file_path"] = file_path
-    #     bb_data["file_name"] = file_name
     bb_data = {
         "file_path": file_path,
         "file_name": file_name,
         "bboxes": all_bb_data_for_this_image,
     }
-
-    # print(all_bb_data_for_this_image)
 
     export_json.append(bb_data)
 
@@ -580,4 +568,4 @@ for background_sample in range(0, BACKGROUND_SAMPLES):
 
 load_and_merge_previous_data(export_json)
 
-# print("------- finished -------")
+print("------- finished -------")
