@@ -15,7 +15,7 @@ def process_labels():
                 width = bb['max_x'] - bb['min_x']
                 heigth = bb['max_y'] - bb['min_y']
                 center_x = bb['max_x'] - width / 2
-                center_y = bb['max_y'] - heigth / 2
+                center_y = 1 - (bb['max_y'] - heigth / 2)
                 model_name = bb['model_name']
 
                 model_class = classes[model_name]
