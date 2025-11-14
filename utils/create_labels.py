@@ -13,7 +13,7 @@ def __main__():
             width = item['max_x'] - item['min_x']
             heigth = item['max_y'] - item['min_y']
             center_x = item['max_x'] - width / 2
-            center_y = item['max_y'] - heigth / 2
+            center_y = 1 - (item['max_y'] - heigth / 2)
             model_name = item['model_name']
 
             model_class = classes[model_name]
