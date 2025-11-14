@@ -240,12 +240,13 @@ def camera_positioning():
     # but for the arms shots it's not
     trashhold_camera_distance = 100
     min_camera_distance = max_dimension * 2
-    max_calculated_distance = max_dimension * 25
+    max_calculated_distance = max_dimension * 15
     max_camera_distance = max_calculated_distance if max_calculated_distance < trashhold_camera_distance else trashhold_camera_distance
 
-    distance = random.uniform(
+    distance = random.triangular(
         min_camera_distance,
-        max_camera_distance
+        max_camera_distance,
+        min_camera_distance
     )
     # Horizontal angle (0-360 deg)
     phi = random.uniform(0, 2 * math.pi)
@@ -342,18 +343,28 @@ export_json = []
 all_model_files = [f for f in os.listdir(MODELS_PATH) if f.endswith('.blend')]
 print(f"Found {len(all_model_files)} .blend files to use as models.")
 
-count = [model for model in all_model_files]
+count_dict = {
+    model.replace(".blend", ''): 0 for model in all_model_files
+}
 
 # It runs SAMPLES_NUMBER times, creating one unique scene per loop.
-for i in range(SAMPLES_NUMBER):
+while min(count_dict.values()) < SAMPLES_NUMBER:
+
+    filteres_models = []
+    for models in all_model_files:
+        model_name = models.replace(".blend", '')
+        if count_dict[model_name] < SAMPLES_NUMBER:
+            filteres_models.append(models)
+
     num_objects = random.gauss(3, 2)
 
-    num_objects = max(1, int(num_objects))  # At least 1 object
-    num_objects = min(num_objects, 15)      # Cap at 15 objects
+    num_objects = max(1, int(num_objects))
+    num_objects = min(num_objects, 15)
     num_objects = int(num_objects)
 
-    num_to_sample = min(num_objects, len(all_model_files))
-    models_to_load_paths = random.sample(all_model_files, num_to_sample)
+    num_to_sample = min(num_objects, len(filteres_models))
+    models_to_load_paths = random.sample(
+        filteres_models, num_to_sample)
 
     current_scene_objects = []  # Keep track of objects to delete later
     all_bb_data_for_this_image = []  # Store all BBs for this one image
@@ -459,6 +470,7 @@ for i in range(SAMPLES_NUMBER):
     # 7. Get Bounding Boxes for ALL objects
     bpy.context.view_layer.update()
 
+    furtherst_point = 0
     for obj in current_scene_objects:
         bbox = get_2d_bounding_box(cam=camera, obj=obj, scene=scene)
 
@@ -505,10 +517,11 @@ for i in range(SAMPLES_NUMBER):
 
         all_bb_data_for_this_image.append(bb_data)
 
-        furtherst_point = 0
         distance = (obj.location - camera.location).length
         if distance > furtherst_point:
             furtherst_point = distance
+
+        count_dict[obj.name] = count_dict[obj.name] + 1
 
     bpy.data.cameras["Camera"].clip_end = furtherst_point + 30
 
@@ -535,7 +548,7 @@ for i in range(SAMPLES_NUMBER):
         "bboxes": all_bb_data_for_this_image,
     }
 
-    print(json.dumps(all_bb_data_for_this_image))
+    print(json.dumps(all_bb_data_for_this_image, indent=4))
     export_json.append(bb_data)
 
     # 10. Clean up the scene for the next loop
@@ -585,3 +598,4 @@ for background_sample in range(0, BACKGROUND_SAMPLES):
 load_and_merge_previous_data(export_json)
 
 print("------- finished -------")
+print(f'total counts: {count_dict}')
