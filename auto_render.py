@@ -16,7 +16,8 @@ X_RES = 640
 Y_RES = 480
 
 # number of background samples to be generated based on the total samples
-BACKGROUND_SAMPLES = int(SAMPLES_NUMBER*0.5)
+# BACKGROUND_SAMPLES = int(SAMPLES_NUMBER*0.005)
+BACKGROUND_SAMPLES = 2
 
 IS_OCLUSSION_ENABLE = True  # occlusion toggle
 
@@ -96,8 +97,21 @@ def get_2d_bounding_box(obj, scene, cam):
     visible_coordinates = [
         coord for coord in normalized_coordinates if coord.z > 0]
 
-    if not visible_coordinates:
-        return None  # Object is not in view
+    on_screen_coordinates = [p for p in visible_coordinates
+                             if p.x >= 0.0 and p.x <= 1.0 and p.y >= 0.0 and p.y <= 1.0]
+
+    if not on_screen_coordinates or not visible_coordinates:
+        return None
+
+    visibility_percent = len(on_screen_coordinates) / len(visible_coordinates)
+
+    MIN_VISIBILITY_THRESHOLD = 0.1
+
+    if visibility_percent < MIN_VISIBILITY_THRESHOLD:
+        # 0.02 is less than 0.05, so this is a "sliver"
+        print(
+            f"Skipping {obj.name}: Only {visibility_percent*100:.1f}% of vertices are visible.")
+        return None  # Skip the sliver
 
     x_values = [vector.x for vector in visible_coordinates]
     y_values = [vector.y for vector in visible_coordinates]
@@ -114,13 +128,12 @@ def get_2d_bounding_box(obj, scene, cam):
     box_min_y = max(0.0, min_y)
     box_max_y = min(1.0, max_y)
 
-    # Calculate pixel width and height for area
     width_px = (box_max_x - box_min_x)
     height_px = (box_max_y - box_min_y)
-    area_px = width_px * height_px
 
-    if area_px <= 0:
-        return None  # Object is visible but outside the clamped frame
+    # Check width and height SEPARATELY
+    if width_px <= 0 or height_px <= 0:
+        return None
 
     return {
         'min_x': box_min_x,
@@ -234,10 +247,6 @@ def camera_positioning():
         min_camera_distance,
         max_camera_distance
     )
-
-    # make sure that the obj always show in the render
-    bpy.data.cameras["Camera"].clip_end = distance + 20
-
     # Horizontal angle (0-360 deg)
     phi = random.uniform(0, 2 * math.pi)
     # Vertical angle (10-80 deg)
@@ -333,6 +342,8 @@ export_json = []
 all_model_files = [f for f in os.listdir(MODELS_PATH) if f.endswith('.blend')]
 print(f"Found {len(all_model_files)} .blend files to use as models.")
 
+count = [model for model in all_model_files]
+
 # It runs SAMPLES_NUMBER times, creating one unique scene per loop.
 for i in range(SAMPLES_NUMBER):
     num_objects = random.gauss(3, 2)
@@ -368,8 +379,8 @@ for i in range(SAMPLES_NUMBER):
 
                     # 1. Get a new random trial position
                     trial_location = (
-                        random.gauss(5, 10),
-                        random.gauss(5, 10),
+                        random.gauss(5, 7),
+                        random.gauss(5, 7),
                         random.uniform(0, 2)
                     )
 
@@ -418,11 +429,11 @@ for i in range(SAMPLES_NUMBER):
     camera.constraints['Track To'].up_axis = 'UP_Y'
 
     # Use the max_dimension of the first object to guide camera distance
-    bpy.context.view_layer.update()
     object_dimens = current_scene_objects[0].dimensions
     max_dimension = max(object_dimens)  # Use this for camera_positioning
 
     camera_positioning()  # Your function should now work fine
+    bpy.context.view_layer.update()
 
     # 5. Set up Lighting
     # We need to find a shader_node, let's just use the first object's
@@ -465,7 +476,7 @@ for i in range(SAMPLES_NUMBER):
             )
 
         # Skip if the conditions is aren't met
-        if occlusion_percentage > 0.55:
+        if occlusion_percentage > 0.75:
             print(
                 f"Skipping {obj.name}: {occlusion_percentage*100}% occluded.")
             continue
@@ -474,15 +485,13 @@ for i in range(SAMPLES_NUMBER):
             print('Invalid, bounding box for {obj.name}, skipping.')
             continue
 
-        if any(cord == 1 for cord in bbox.values()):
-            print('Invalid, bounding box for {obj.name}, skipping.')
-            continue
-
         height = bbox["max_y"] - bbox["min_y"]
         width = bbox["max_x"] - bbox["min_x"]
+        area = width * height
 
-        if width * height < 0.01:
-            print('Invalid, bounding box too small for {obj.name}, skipping.')
+        if area < 0.0002:
+            print(
+                f'Invalid, bounding box too small, area = {area} for {obj.name}, skipping.')
             continue
 
         # make all the bb in the same object per image
@@ -493,11 +502,17 @@ for i in range(SAMPLES_NUMBER):
             "max_y": bbox["max_y"],
             "model_name": obj.name.split(".")[0],  # Clean up name
         }
-        print(bb_data)
-        all_bb_data_for_this_image.append(bb_data)
-        print(all_bb_data_for_this_image)
 
-        # 8. Render the Scene
+        all_bb_data_for_this_image.append(bb_data)
+
+        furtherst_point = 0
+        distance = (obj.location - camera.location).length
+        if distance > furtherst_point:
+            furtherst_point = distance
+
+    bpy.data.cameras["Camera"].clip_end = furtherst_point + 30
+
+    # 8. Render the Scene
     if not all_bb_data_for_this_image:
         print("No objects were visible or passed occlusion. Skipping render.")
         # Cleanup and continue
@@ -520,6 +535,7 @@ for i in range(SAMPLES_NUMBER):
         "bboxes": all_bb_data_for_this_image,
     }
 
+    print(json.dumps(all_bb_data_for_this_image))
     export_json.append(bb_data)
 
     # 10. Clean up the scene for the next loop
