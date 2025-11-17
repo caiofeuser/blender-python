@@ -102,15 +102,15 @@ def get_2d_bounding_box(obj, scene, cam):
     visible_coordinates = [
         coord for coord in normalized_coordinates if coord.z > 0]
 
-    on_screen_coordinates = [p for p in visible_coordinates
-                             if p.x >= 0.0 and p.x <= 1.0 and p.y >= 0.0 and p.y <= 1.0]
+    on_screen_coordinates = [p for p in visible_coordinates if p.x >=
+                             0.0 and p.x <= 1.0 and p.y >= 0.0 and p.y <= 1.0]
 
     if not on_screen_coordinates or not visible_coordinates:
         return None
 
     visibility_percent = len(on_screen_coordinates) / len(visible_coordinates)
 
-    MIN_VISIBILITY_THRESHOLD = 0.1
+    MIN_VISIBILITY_THRESHOLD = 0.15
 
     if visibility_percent < MIN_VISIBILITY_THRESHOLD:
         # 0.02 is less than 0.05, so this is a "sliver"
@@ -238,14 +238,14 @@ def remove_occluder():
     objs.remove(objs["Occluder"], do_unlink=True)
 
 
-def camera_positioning():
+def camera_positioning(cluster_max_dimension=10):
     # random camera position
     # 1. Pick random spherical coordinates
     # ideally the more furthest distance would rely in the object size,
     # but for the arms shots it's not
-    trashhold_camera_distance = 100
-    min_camera_distance = max_dimension * 2
-    max_calculated_distance = max_dimension * 15
+    trashhold_camera_distance = 50
+    min_camera_distance = cluster_max_dimension * 2.5
+    max_calculated_distance = cluster_max_dimension * 8
     max_camera_distance = max_calculated_distance if max_calculated_distance < trashhold_camera_distance else trashhold_camera_distance
 
     distance = random.triangular(
@@ -268,6 +268,8 @@ def camera_positioning():
     camera.data.shift_x = random.uniform(-0.3, 0.3)
     camera.data.shift_y = random.uniform(-0.3, 0.3)
 
+    return distance
+
 
 def setup_background_and_randomization(background_node, shader_node):
     # load random background
@@ -286,17 +288,29 @@ def setup_background_and_randomization(background_node, shader_node):
         0.3, 0.5)
 
 
-def jitter_camera_occluder_position(occluder):
-    t = random.uniform(0.2, 0.4)
-    base_point_on_line = camera.location * t
+def jitter_camera_occluder_position(occluder, camera, scene_center, cluster_max_dimension):
+    """
+    Places the occluder at a random point between the camera
+    and the scene_center, with some random jitter.
+    """
 
+    # 1. Get a point 20-40% of the way from the camera *to the target*
+    cam_loc = camera.location
+    target_loc = scene_center.location
+    t = random.uniform(0.2, 0.4)
+
+    # Vector math: Point = A + (B - A) * t
+    base_point_on_line = cam_loc + (target_loc - cam_loc) * t
+
+    # 2. Get camera's "right" and "up" vectors
     cam_right_vec = camera.matrix_world.col[0].xyz
     cam_up_vec = camera.matrix_world.col[1].xyz
 
-    jitter_x_amount = random.uniform(-max_dimension *
-                                     0.7, max_dimension * 0.7)
-    jitter_y_amount = random.uniform(-max_dimension *
-                                     0.7, max_dimension * 0.7)
+    # 3. Add random jitter based on the cluster size
+    jitter_x_amount = random.uniform(-cluster_max_dimension *
+                                     0.7, cluster_max_dimension * 0.7)
+    jitter_y_amount = random.uniform(-cluster_max_dimension *
+                                     0.7, cluster_max_dimension * 0.7)
 
     occluder.location = base_point_on_line + \
         (cam_right_vec * jitter_x_amount) + \
@@ -355,6 +369,10 @@ count_dict = {
 # It runs SAMPLES_NUMBER times, creating one unique scene per loop.
 while min(count_dict.values()) < SAMPLES_NUMBER:
 
+    bb_count = 0
+    acc_bb_area = 0
+    acc_distance = 0
+
     filteres_models = []
     for models in all_model_files:
         model_name = models.replace(".blend", '')
@@ -395,13 +413,14 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
 
                     # 1. Get a new random trial position
                     trial_location = (
-                        random.gauss(5, 7),
-                        random.gauss(5, 7),
-                        random.uniform(0, 2)
+                        random.uniform(-10, 10),
+                        random.uniform(-10, 10),
+                        random.uniform(0, 5)
                     )
 
                     # 2. Check it against all previously placed objects
                     for placed_obj in current_scene_objects:
+
                         distance = (Vector(trial_location) -
                                     placed_obj.location).length
 
@@ -438,18 +457,49 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
         bpy.context.active_object.name = "SceneCenter"
     scene_center = bpy.data.objects["SceneCenter"]
 
+    avg_location = Vector((0, 0, 0))
+    for obj in current_scene_objects:
+        avg_location += obj.location
+    avg_location /= len(current_scene_objects)
+
+    # 2. Move our "SceneCenter" Empty to that new average location
+    scene_center.location = avg_location
+
+    # 3. Calculate the "bounding box" of the *entire cluster*
+    all_locations = [obj.location for obj in current_scene_objects]
+    min_x = min(loc.x for loc in all_locations)
+    max_x = max(loc.x for loc in all_locations)
+    min_y = min(loc.y for loc in all_locations)
+    max_y = max(loc.y for loc in all_locations)
+
+    # Get the largest dimension of the spawn area
+    cluster_width = max_x - min_x
+    cluster_height = max_y - min_y
+    max_cluster_dimension = max(cluster_width, cluster_height)
+
+    # Add the size of the first object as a buffer
+    # This prevents the camera from clipping if there's only one object
+    max_cluster_dimension += max(current_scene_objects[0].dimensions)
+
     camera.constraints.clear()
     camera.constraints.new(type='TRACK_TO')
     camera.constraints['Track To'].target = scene_center
     camera.constraints['Track To'].track_axis = 'TRACK_NEGATIVE_Z'
     camera.constraints['Track To'].up_axis = 'UP_Y'
 
-    # Use the max_dimension of the first object to guide camera distance
-    object_dimens = current_scene_objects[0].dimensions
-    max_dimension = max(object_dimens)  # Use this for camera_positioning
-
-    camera_positioning()  # Your function should now work fine
     bpy.context.view_layer.update()
+    object_dimens = current_scene_objects[0].dimensions
+
+    distance = camera_positioning()  # Your function should now work fine
+    bpy.context.view_layer.update()
+
+    bpy.context.view_layer.update()
+    furtherst_point = 0
+    camera_location = camera.location
+    for obj in current_scene_objects:
+        distance = (obj.location - camera_location).length
+        if distance > furtherst_point:
+            furtherst_point = distance
 
     # 5. Set up Lighting
     # We need to find a shader_node, let's just use the first object's
@@ -467,10 +517,18 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
 
         if random.uniform(0, 1) > 0.5:
             occluder.hide_render = False
-            jitter_camera_occluder_position(occluder=occluder)
+            jitter_camera_occluder_position(
+                occluder, camera, scene_center, max_cluster_dimension)
 
-            occ_size = max_dimension * random.uniform(0.2, 0.7)
-            occluder.scale = (occ_size, occ_size, 1)
+            occ_size = max_cluster_dimension * random.uniform(0.2, 0.7)
+
+            # Set scale. We set Z scale to something small but non-zero
+            # if it's a cube/sphere, or 1 if it's a plane.
+            if occluder.data.name == "Plane":
+                occluder.scale = (occ_size, occ_size, 1)
+            else:
+                # Make it a box/sphere
+                occluder.scale = (occ_size, occ_size, occ_size * 0.5)
 
     # 7. Get Bounding Boxes for ALL objects
     bpy.context.view_layer.update()
@@ -518,7 +576,19 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
             "min_y": bbox["min_y"],
             "max_y": bbox["max_y"],
             "model_name": obj.name.split(".")[0],  # Clean up name
+            "distance_from_the_camera": (obj.location - camera.location).length,
+            "camera_set_to": distance,
+            "area": area,
+            "obj_location": {
+                "x": obj.location.x,
+                "y": obj.location.y,
+                "z": obj.location.z,
+            },
         }
+
+        bb_count = bb_count + 1
+        acc_bb_area = acc_bb_area + area
+        acc_distance = acc_distance + distance
 
         all_bb_data_for_this_image.append(bb_data)
 
@@ -526,7 +596,11 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
         if distance > furtherst_point:
             furtherst_point = distance
 
-        count_dict[obj.name] = count_dict[obj.name] + 1
+        model_name_clean = obj.name.split(".")[0]
+
+    # Check if it's a model we're tracking
+    if model_name_clean in count_dict:
+        count_dict[model_name_clean] += 1
 
     bpy.data.cameras["Camera"].clip_end = furtherst_point + 30
 
@@ -598,6 +672,16 @@ for background_sample in range(0, BACKGROUND_SAMPLES):
     }
 
     export_json.append(background_data)
+
+avg_bb_area = acc_bb_area / bb_count
+avg_distance = acc_distance / bb_count
+
+export_json.append({
+    "statistics": {
+        "average_bb_area": avg_bb_area,
+        "average_distance_from_camera": avg_distance,
+    }
+})
 
 
 load_and_merge_previous_data(export_json)
