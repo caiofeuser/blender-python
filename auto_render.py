@@ -11,7 +11,7 @@ import bpy
 from bpy_extras.object_utils import world_to_camera_view
 
 
-SAMPLES_NUMBER = 5  # number os samples to be generated
+SAMPLES_NUMBER = 100  # number os samples to be generated
 # x and y resolution
 X_RES = 640
 Y_RES = 480
@@ -400,6 +400,7 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
             data_to.objects = [
                 name for name in data_from.objects if bpy.data.objects.get(name) is None]
 
+        all_dimensions = []
         for obj in data_to.objects:
             if obj and obj.type == 'MESH':
                 obj.scale = (0.066, 0.066, 0.066)
@@ -438,6 +439,7 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
                         )
                         scene.collection.objects.link(obj)
                         current_scene_objects.append(obj)
+                        all_dimensions.append(obj.dimensions)
                         break  # Exit the 'while' loop
 
                 if not is_position_safe:
@@ -511,6 +513,7 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
 
     # 6. Set up Occluder (This logic can be mostly the same)
     occluder = None
+    max_dimentsion = max(object_dimens)
     if IS_OCLUSSION_ENABLE:
         occluder = create_random_occluder()
         occluder.hide_render = True
@@ -520,7 +523,7 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
             jitter_camera_occluder_position(
                 occluder, camera, scene_center, max_cluster_dimension)
 
-            occ_size = max_cluster_dimension * random.uniform(0.2, 0.7)
+            occ_size = max_dimentsion * random.uniform(0.2, 0.7)
 
             # Set scale. We set Z scale to something small but non-zero
             # if it's a cube/sphere, or 1 if it's a plane.
