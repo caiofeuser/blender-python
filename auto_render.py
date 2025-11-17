@@ -4,13 +4,14 @@ import os
 import random
 import uuid
 from mathutils import Vector
+import datetime
 
 
 import bpy
 from bpy_extras.object_utils import world_to_camera_view
 
 
-SAMPLES_NUMBER = 20  # number os samples to be generated
+SAMPLES_NUMBER = 5  # number os samples to be generated
 # x and y resolution
 X_RES = 640
 Y_RES = 480
@@ -24,7 +25,9 @@ IS_OCLUSSION_ENABLE = True  # occlusion toggle
 # file paths
 BACKGROUND_PATH = './backgrounds'
 MODELS_PATH = "./models"
-RENDERS_PATH = './renders'
+BASE_RENDERS_PATH = './renders'
+now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+RENDERS_PATH = f'{BASE_RENDERS_PATH}/renders_auto_{now}'
 
 # rendering settings
 
@@ -35,6 +38,8 @@ ENGINE = 'CYCLES'  # BLENDER_EEVEE_NEXT or CYCLES
 # multi object spawn settings
 MIN_SPAWN_DISTANCE = 1
 MAX_SPAWN_ATTEMPTS = 50
+
+os.makedirs(RENDERS_PATH, exist_ok=True)
 
 
 # set the proper engine
