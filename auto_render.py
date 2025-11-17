@@ -380,6 +380,7 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
             filteres_models.append(models)
 
     num_objects = random.gauss(3, 2)
+    num_objects = 5  # remove later
 
     num_objects = max(1, int(num_objects))
     num_objects = min(num_objects, 15)
@@ -539,6 +540,25 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
     furtherst_point = 0
     for obj in current_scene_objects:
         bbox = get_2d_bounding_box(cam=camera, obj=obj, scene=scene)
+
+        if len(current_scene_objects) > 1:
+            for other_obj in current_scene_objects:
+                if other_obj == obj or other_obj == occluder:
+                    continue
+                other_bbox = get_2d_bounding_box(
+                    cam=camera, obj=other_obj, scene=scene)
+                if not other_bbox:
+                    continue
+                occlusion_by_other = calculate_occlusion(
+                    target=obj,
+                    occluder=other_obj,
+                    cam=camera,
+                    scene=scene)
+                if occlusion_by_other > 0.75:
+                    bbox = None
+                    print(
+                        f"Skipping {obj.name}: {occlusion_by_other*100}% occluded by {other_obj.name}.")
+                    break
 
         if not bbox:
             continue  # Object is not visible
