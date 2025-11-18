@@ -380,7 +380,7 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
             filteres_models.append(models)
 
     num_objects = random.gauss(3, 2)
-    num_objects = 5  # remove later
+    # num_objects = 5  # remove later
 
     num_objects = max(1, int(num_objects))
     num_objects = min(num_objects, 15)
