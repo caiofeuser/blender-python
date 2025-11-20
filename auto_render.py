@@ -23,17 +23,17 @@ BACKGROUND_SAMPLES = 50
 IS_OCLUSSION_ENABLE = True  # occlusion toggle
 
 # file paths
-BACKGROUND_PATH = './backgrounds'
+BACKGROUND_PATH = "./backgrounds"
 MODELS_PATH = "./models"
-BASE_RENDERS_PATH = './renders'
+BASE_RENDERS_PATH = "./renders"
 now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-RENDERS_PATH = f'{BASE_RENDERS_PATH}/renders_auto_{now}'
+RENDERS_PATH = f"{BASE_RENDERS_PATH}/renders_auto_{now}"
 
 # rendering settings
 
 USE_GPU = True  # GPU or CPU rendering
 CYCLES = 128  # number of cycles
-ENGINE = 'CYCLES'  # BLENDER_EEVEE_NEXT or CYCLES
+ENGINE = "CYCLES"  # BLENDER_EEVEE_NEXT or CYCLES
 
 # multi object spawn settings
 MIN_SPAWN_DISTANCE = 1
@@ -44,11 +44,11 @@ os.makedirs(RENDERS_PATH, exist_ok=True)
 
 # set the proper engine
 bpy.context.scene.render.engine = ENGINE
-bpy.context.scene.cycles.device = 'GPU' if USE_GPU else 'CPU'
+bpy.context.scene.cycles.device = "GPU" if USE_GPU else "CPU"
 bpy.context.scene.cycles.samples = CYCLES
 bpy.context.scene.render.resolution_x = X_RES
 bpy.context.scene.render.resolution_y = Y_RES
-bpy.context.scene.view_settings.look = 'AgX - High Contrast'
+bpy.context.scene.view_settings.look = "AgX - High Contrast"
 
 
 # load a random background
@@ -56,7 +56,7 @@ backgrounds = os.listdir(BACKGROUND_PATH)
 filered_backgrounds = []
 
 for file in backgrounds:
-    if file.endswith('.exr'):
+    if file.endswith(".exr"):
         filered_backgrounds.append(file)
 
 # set up world enviroment
@@ -99,11 +99,13 @@ def get_2d_bounding_box(obj, scene, cam):
         for axis in global_coordinates
     ]
 
-    visible_coordinates = [
-        coord for coord in normalized_coordinates if coord.z > 0]
+    visible_coordinates = [coord for coord in normalized_coordinates if coord.z > 0]
 
-    on_screen_coordinates = [p for p in visible_coordinates if p.x >=
-                             0.0 and p.x <= 1.0 and p.y >= 0.0 and p.y <= 1.0]
+    on_screen_coordinates = [
+        p
+        for p in visible_coordinates
+        if p.x >= 0.0 and p.x <= 1.0 and p.y >= 0.0 and p.y <= 1.0
+    ]
 
     if not on_screen_coordinates or not visible_coordinates:
         return None
@@ -115,7 +117,8 @@ def get_2d_bounding_box(obj, scene, cam):
     if visibility_percent < MIN_VISIBILITY_THRESHOLD:
         # 0.02 is less than 0.05, so this is a "sliver"
         print(
-            f"Skipping {obj.name}: Only {visibility_percent*100:.1f}% of vertices are visible.")
+            f"Skipping {obj.name}: Only {visibility_percent*100:.1f}% of vertices are visible."
+        )
         return None  # Skip the sliver
 
     x_values = [vector.x for vector in visible_coordinates]
@@ -133,23 +136,23 @@ def get_2d_bounding_box(obj, scene, cam):
     box_min_y = max(0.0, min_y)
     box_max_y = min(1.0, max_y)
 
-    width_px = (box_max_x - box_min_x)
-    height_px = (box_max_y - box_min_y)
+    width_px = box_max_x - box_min_x
+    height_px = box_max_y - box_min_y
 
     # Check width and height SEPARATELY
     if width_px <= 0 or height_px <= 0:
         return None
 
     return {
-        'min_x': box_min_x,
-        'max_x': box_max_x,
-        'min_y': box_min_y,
-        'max_y': box_max_y,
+        "min_x": box_min_x,
+        "max_x": box_max_x,
+        "min_y": box_min_y,
+        "max_y": box_max_y,
     }
 
 
 def denormalize_coord(x1, x2, y1, y2):
-    """"
+    """ "
     Denormalize the bounding box coordinates from (0-1) to pixel values based
     on the render resolution."""
     denormalized_min_x = x1 * X_RES
@@ -161,7 +164,7 @@ def denormalize_coord(x1, x2, y1, y2):
         "min_x": denormalized_min_x,
         "max_x": denormalized_max_x,
         "min_y": denormalized_min_y,
-        "max_y": denormalized_max_y
+        "max_y": denormalized_max_y,
     }
 
 
@@ -176,17 +179,18 @@ def calculate_occlusion(target, occluder, cam, scene):
     if not target_bb or not occluder_bb:
         return 0.0
 
-    target_area = (target_bb['max_x'] - target_bb['min_x']) * \
-        (target_bb['max_y'] - target_bb['min_y'])
+    target_area = (target_bb["max_x"] - target_bb["min_x"]) * (
+        target_bb["max_y"] - target_bb["min_y"]
+    )
 
     if not target_area:
         return 0.0  # Target is not visible
 
     # Calculate intersection
-    xA = max(target_bb['min_x'], occluder_bb['min_x'])
-    yA = max(target_bb['min_y'], occluder_bb['min_y'])
-    xB = min(target_bb['max_x'], occluder_bb['max_x'])
-    yB = min(target_bb['max_y'], occluder_bb['max_y'])
+    xA = max(target_bb["min_x"], occluder_bb["min_x"])
+    yA = max(target_bb["min_y"], occluder_bb["min_y"])
+    xB = min(target_bb["max_x"], occluder_bb["max_x"])
+    yB = min(target_bb["max_y"], occluder_bb["max_y"])
 
     width = xB - xA
     height = yB - yA
@@ -202,20 +206,20 @@ def calculate_occlusion(target, occluder, cam, scene):
 
 def set_obj_to_origin(obj):
     bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')
+    bpy.ops.object.origin_set(type="ORIGIN_GEOMETRY", center="BOUNDS")
     obj.location = (0, 0, 0)
     obj.rotation_euler = (0, 0, 0)
 
 
 def create_random_occluder():
-    shape = random.choice(['plane', 'cube', 'sphere', 'cylinder'])
-    if shape == 'plane':
+    shape = random.choice(["plane", "cube", "sphere", "cylinder"])
+    if shape == "plane":
         bpy.ops.mesh.primitive_plane_add(size=1)
-    elif shape == 'cube':
+    elif shape == "cube":
         bpy.ops.mesh.primitive_cube_add(size=1)
-    elif shape == 'sphere':
+    elif shape == "sphere":
         bpy.ops.mesh.primitive_uv_sphere_add(radius=1)
-    elif shape == 'cylinder':
+    elif shape == "cylinder":
         bpy.ops.mesh.primitive_cylinder_add(radius=1, depth=0.5)
     occluder = bpy.context.active_object
     occluder.name = "Occluder"
@@ -226,9 +230,12 @@ def create_random_occluder():
     shader_occ = mat_occ.node_tree.nodes.get("Principled BSDF")
 
     shader_occ.inputs["Base Color"].default_value = (
-        random.random(), random.random(), random.random(), 1)
-    shader_occ.inputs["Roughness"].default_value = random.uniform(
-        0.1, 0.9)
+        random.random(),
+        random.random(),
+        random.random(),
+        1,
+    )
+    shader_occ.inputs["Roughness"].default_value = random.uniform(0.1, 0.9)
 
     return occluder
 
@@ -246,12 +253,14 @@ def camera_positioning(cluster_max_dimension=10):
     trashhold_camera_distance = 50
     min_camera_distance = cluster_max_dimension * 2.5
     max_calculated_distance = cluster_max_dimension * 8
-    max_camera_distance = max_calculated_distance if max_calculated_distance < trashhold_camera_distance else trashhold_camera_distance
+    max_camera_distance = (
+        max_calculated_distance
+        if max_calculated_distance < trashhold_camera_distance
+        else trashhold_camera_distance
+    )
 
     distance = random.triangular(
-        min_camera_distance,
-        max_camera_distance,
-        min_camera_distance
+        min_camera_distance, max_camera_distance, min_camera_distance
     )
     # Horizontal angle (0-360 deg)
     phi = random.uniform(0, 2 * math.pi)
@@ -273,22 +282,20 @@ def camera_positioning(cluster_max_dimension=10):
 
 def setup_background_and_randomization(background_node, shader_node):
     # load random background
-    img_path = os.path.join(
-        BACKGROUND_PATH, random.choice(filered_backgrounds))
+    img_path = os.path.join(BACKGROUND_PATH, random.choice(filered_backgrounds))
     img = bpy.data.images.load(img_path)
     env_texture_node.image = img
 
     # light randomization
-    background_node.inputs['Strength'].default_value = random.uniform(
-        0.8, 2.5)
+    background_node.inputs["Strength"].default_value = random.uniform(0.8, 2.5)
     # roughness randomization
-    shader_node.inputs["Subsurface Weight"].default_value = random.uniform(
-        0.0, 0.05)
-    shader_node.inputs["Roughness"].default_value = random.uniform(
-        0.3, 0.5)
+    shader_node.inputs["Subsurface Weight"].default_value = random.uniform(0.0, 0.05)
+    shader_node.inputs["Roughness"].default_value = random.uniform(0.3, 0.5)
 
 
-def jitter_camera_occluder_position(occluder, camera, scene_center, cluster_max_dimension):
+def jitter_camera_occluder_position(
+    occluder, camera, scene_center, cluster_max_dimension
+):
     """
     Places the occluder at a random point between the camera
     and the scene_center, with some random jitter.
@@ -307,20 +314,24 @@ def jitter_camera_occluder_position(occluder, camera, scene_center, cluster_max_
     cam_up_vec = camera.matrix_world.col[1].xyz
 
     # 3. Add random jitter based on the cluster size
-    jitter_x_amount = random.uniform(-cluster_max_dimension *
-                                     0.7, cluster_max_dimension * 0.7)
-    jitter_y_amount = random.uniform(-cluster_max_dimension *
-                                     0.7, cluster_max_dimension * 0.7)
+    jitter_x_amount = random.uniform(
+        -cluster_max_dimension * 0.7, cluster_max_dimension * 0.7
+    )
+    jitter_y_amount = random.uniform(
+        -cluster_max_dimension * 0.7, cluster_max_dimension * 0.7
+    )
 
-    occluder.location = base_point_on_line + \
-        (cam_right_vec * jitter_x_amount) + \
-        (cam_up_vec * jitter_y_amount)
+    occluder.location = (
+        base_point_on_line
+        + (cam_right_vec * jitter_x_amount)
+        + (cam_up_vec * jitter_y_amount)
+    )
 
 
 def load_and_merge_previous_data(new_data):
     prev_data = []
     try:
-        with open("bb.json", 'r') as f:
+        with open("bb.json", "r") as f:
             prev_data = json.load(f)
             if not isinstance(prev_data, list):
                 prev_data = []
@@ -336,35 +347,89 @@ def load_and_merge_previous_data(new_data):
     print(f"Adding {len(export_json)} new bounding boxes.")
     export_json.extend(prev_data)
 
-    with open('bb.json', 'w') as f:
+    with open("bb.json", "w") as f:
         json.dump(export_json, f, indent=4)  # Added indent=4 for readability
 
 
-background_node = nodes.new(type='ShaderNodeBackground')
-env_texture_node = nodes.new(type='ShaderNodeTexEnvironment')
-output_node = nodes.new(type='ShaderNodeOutputWorld')
+def check_visibility_raycast(obj, camera, scene, max_rays=20):
+    """
+    Casts rays from the camera to random vertices of the object.
+    Returns a visibility ratio (0.0 to 1.0).
+    0.0 = Fully Occluded (Invisible)
+    1.0 = Fully Visible
+    """
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+
+    # Get mesh data with world transformations applied
+    # We use a temporary evaluated object to get the actual shape in the scene
+    obj_eval = obj.evaluated_get(depsgraph)
+    mesh = obj_eval.data
+    matrix_world = obj.matrix_world
+
+    # optimization: Don't check every single vertex, just a sample
+    num_vertices = len(mesh.vertices)
+    sample_indices = list(range(num_vertices))
+
+    if num_vertices > max_rays:
+        sample_indices = random.sample(sample_indices, max_rays)
+
+    visible_points = 0
+    total_points = len(sample_indices)
+
+    cam_loc = camera.location
+
+    for i in sample_indices:
+        # Get global coordinate of the vertex
+        v_loc = matrix_world @ mesh.vertices[i].co
+
+        # Direction vector from Camera -> Vertex
+        direction = v_loc - cam_loc
+        distance = direction.length
+        direction.normalize()
+
+        # Cast the ray
+        # We cast slightly shorter than the full distance to avoid self-intersection issues at the exact vertex point
+        success, location, normal, index, hit_obj, matrix = scene.ray_cast(
+            depsgraph,
+            origin=cam_loc,
+            direction=direction,
+            distance=distance - 0.001,  # Stop slightly before the vertex
+        )
+
+        # Logic:
+        # If we hit NOTHING (success=False), it means the path is clear to the vertex -> Visible
+        # If we hit THE SAME OBJECT (hit_obj == obj), it's visible (self-intersection handled by distance check usually, but good safety)
+        # If we hit SOMETHING ELSE, it's occluded.
+
+        if not success:
+            visible_points += 1
+        elif hit_obj.name == obj.name:
+            visible_points += 1
+
+    return visible_points / total_points
+
+
+background_node = nodes.new(type="ShaderNodeBackground")
+env_texture_node = nodes.new(type="ShaderNodeTexEnvironment")
+output_node = nodes.new(type="ShaderNodeOutputWorld")
 texture_node = nodes.new(type="ShaderNodeTexCoord")
 mapping_node = nodes.new(type="ShaderNodeMapping")
 
 # linking all the nodes
+node_tree.links.new(texture_node.outputs["Generated"], mapping_node.inputs["Vector"])
+node_tree.links.new(mapping_node.outputs["Vector"], env_texture_node.inputs["Vector"])
+node_tree.links.new(env_texture_node.outputs["Color"], background_node.inputs["Color"])
 node_tree.links.new(
-    texture_node.outputs["Generated"], mapping_node.inputs["Vector"])
-node_tree.links.new(
-    mapping_node.outputs["Vector"], env_texture_node.inputs["Vector"])
-node_tree.links.new(
-    env_texture_node.outputs['Color'], background_node.inputs['Color'])
-node_tree.links.new(
-    background_node.outputs['Background'], output_node.inputs['Surface'])
+    background_node.outputs["Background"], output_node.inputs["Surface"]
+)
 
 # list that will be exported to json
 export_json = []
 
-all_model_files = [f for f in os.listdir(MODELS_PATH) if f.endswith('.blend')]
+all_model_files = [f for f in os.listdir(MODELS_PATH) if f.endswith(".blend")]
 print(f"Found {len(all_model_files)} .blend files to use as models.")
 
-count_dict = {
-    model.replace(".blend", ''): 0 for model in all_model_files
-}
+count_dict = {model.replace(".blend", ""): 0 for model in all_model_files}
 
 # It runs SAMPLES_NUMBER times, creating one unique scene per loop.
 while min(count_dict.values()) < SAMPLES_NUMBER:
@@ -375,7 +440,7 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
 
     filteres_models = []
     for models in all_model_files:
-        model_name = models.replace(".blend", '')
+        model_name = models.replace(".blend", "")
         if count_dict[model_name] < SAMPLES_NUMBER:
             filteres_models.append(models)
 
@@ -387,8 +452,7 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
     num_objects = int(num_objects)
 
     num_to_sample = min(num_objects, len(filteres_models))
-    models_to_load_paths = random.sample(
-        filteres_models, num_to_sample)
+    models_to_load_paths = random.sample(filteres_models, num_to_sample)
 
     current_scene_objects = []  # Keep track of objects to delete later
     all_bb_data_for_this_image = []  # Store all BBs for this one image
@@ -399,11 +463,12 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
 
         with bpy.data.libraries.load(filepath, link=False) as (data_from, data_to):
             data_to.objects = [
-                name for name in data_from.objects if bpy.data.objects.get(name) is None]
+                name for name in data_from.objects if bpy.data.objects.get(name) is None
+            ]
 
         all_dimensions = []
         for obj in data_to.objects:
-            if obj and obj.type == 'MESH':
+            if obj and obj.type == "MESH":
                 obj.scale = (0.066, 0.066, 0.066)
 
                 is_position_safe = False
@@ -417,14 +482,13 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
                     trial_location = (
                         random.uniform(-10, 10),
                         random.uniform(-10, 10),
-                        random.uniform(0, 5)
+                        random.uniform(0, 5),
                     )
 
                     # 2. Check it against all previously placed objects
                     for placed_obj in current_scene_objects:
 
-                        distance = (Vector(trial_location) -
-                                    placed_obj.location).length
+                        distance = (Vector(trial_location) - placed_obj.location).length
 
                         if distance < MIN_SPAWN_DISTANCE:
                             is_position_safe = False  # This spot is too close
@@ -436,7 +500,7 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
                         obj.rotation_euler = (
                             random.uniform(0, 2 * math.pi),
                             random.uniform(0, 2 * math.pi),
-                            random.uniform(0, 2 * math.pi)
+                            random.uniform(0, 2 * math.pi),
                         )
                         scene.collection.objects.link(obj)
                         current_scene_objects.append(obj)
@@ -445,7 +509,8 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
 
                 if not is_position_safe:
                     print(
-                        f"Warning: Could not find clear spot for {obj.name}. Skipping it.")
+                        f"Warning: Could not find clear spot for {obj.name}. Skipping it."
+                    )
 
                     bpy.data.objects.remove(obj, do_unlink=True)
 
@@ -485,10 +550,10 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
     max_cluster_dimension += max(current_scene_objects[0].dimensions)
 
     camera.constraints.clear()
-    camera.constraints.new(type='TRACK_TO')
-    camera.constraints['Track To'].target = scene_center
-    camera.constraints['Track To'].track_axis = 'TRACK_NEGATIVE_Z'
-    camera.constraints['Track To'].up_axis = 'UP_Y'
+    camera.constraints.new(type="TRACK_TO")
+    camera.constraints["Track To"].target = scene_center
+    camera.constraints["Track To"].track_axis = "TRACK_NEGATIVE_Z"
+    camera.constraints["Track To"].up_axis = "UP_Y"
 
     bpy.context.view_layer.update()
     object_dimens = current_scene_objects[0].dimensions
@@ -509,8 +574,7 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
     mat = current_scene_objects[0].material_slots[0].material
     shader_node = mat.node_tree.nodes.get("Principled BSDF")
     setup_background_and_randomization(background_node, shader_node)
-    mapping_node.inputs['Rotation'].default_value[2] = random.uniform(
-        0, math.pi * 2)
+    mapping_node.inputs["Rotation"].default_value[2] = random.uniform(0, math.pi * 2)
 
     # 6. Set up Occluder (This logic can be mostly the same)
     occluder = None
@@ -522,7 +586,8 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
         if random.uniform(0, 1) > 0.5:
             occluder.hide_render = False
             jitter_camera_occluder_position(
-                occluder, camera, scene_center, max_cluster_dimension)
+                occluder, camera, scene_center, max_cluster_dimension
+            )
 
             occ_size = max_dimentsion * random.uniform(0.2, 0.7)
 
@@ -542,45 +607,39 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
         bbox = get_2d_bounding_box(cam=camera, obj=obj, scene=scene)
 
         if len(current_scene_objects) > 1:
-            for other_obj in current_scene_objects:
-                if other_obj == obj or other_obj == occluder:
-                    continue
-                other_bbox = get_2d_bounding_box(
-                    cam=camera, obj=other_obj, scene=scene)
-                if not other_bbox:
-                    continue
-                occlusion_by_other = calculate_occlusion(
-                    target=obj,
-                    occluder=other_obj,
-                    cam=camera,
-                    scene=scene)
-                if occlusion_by_other > 0.75:
-                    bbox = None
-                    print(
-                        f"Skipping {obj.name}: {occlusion_by_other*100}% occluded by {other_obj.name}.")
-                    break
+            visibility_ratio = check_visibility_raycast(obj, camera, scene)
 
+        # If less than 20% of the object is visible, kill the label.
         if not bbox:
-            continue  # Object is not visible
+            continue
+
+        # 2. Check Visibility (Raycast)
+        # We run this unconditionally for every visible object
+        visibility_ratio = check_visibility_raycast(obj, camera, scene)
+
+        # 3. Filter based on visibility
+        # If less than 20% of the object is visible, kill the label.
+        if visibility_ratio < 0.2:
+            bbox = None
+            print(
+                f"Skipping {obj.name}: only {visibility_ratio*100:.1f}% visible (Occluded)."
+            )
+            continue  # Skip to next object immediately
 
         # Check occlusion against the main occluder
         occlusion_percentage = 0.0
         if IS_OCLUSSION_ENABLE and not occluder.hide_render:
             occlusion_percentage = calculate_occlusion(
-                target=obj,
-                occluder=occluder,
-                cam=camera,
-                scene=scene
+                target=obj, occluder=occluder, cam=camera, scene=scene
             )
 
         # Skip if the conditions is aren't met
         if occlusion_percentage > 0.75:
-            print(
-                f"Skipping {obj.name}: {occlusion_percentage*100}% occluded.")
+            print(f"Skipping {obj.name}: {occlusion_percentage*100}% occluded.")
             continue
 
         if any(cord < 0 for cord in bbox.values()):
-            print('Invalid, bounding box for {obj.name}, skipping.')
+            print("Invalid, bounding box for {obj.name}, skipping.")
             continue
 
         height = bbox["max_y"] - bbox["min_y"]
@@ -589,7 +648,8 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
 
         if area < 0.0002:
             print(
-                f'Invalid, bounding box too small, area = {area} for {obj.name}, skipping.')
+                f"Invalid, bounding box too small, area = {area} for {obj.name}, skipping."
+            )
             continue
 
         # make all the bb in the same object per image
@@ -669,14 +729,12 @@ for background_sample in range(0, BACKGROUND_SAMPLES):
     camera.rotation_euler[2] = random.uniform(0, 2 * math.pi)  # Z rotation
 
     # load random background
-    img_path = os.path.join(
-        BACKGROUND_PATH, random.choice(filered_backgrounds))
+    img_path = os.path.join(BACKGROUND_PATH, random.choice(filered_backgrounds))
     img = bpy.data.images.load(img_path)
     env_texture_node.image = img
 
     # light randomization
-    background_node.inputs['Strength'].default_value = random.uniform(
-        0.8, 2.5)
+    background_node.inputs["Strength"].default_value = random.uniform(0.8, 2.5)
 
     # update the matrix_world from the last shot
     bpy.context.view_layer.update()
@@ -699,15 +757,17 @@ for background_sample in range(0, BACKGROUND_SAMPLES):
 avg_bb_area = acc_bb_area / bb_count
 avg_distance = acc_distance / bb_count
 
-export_json.append({
-    "statistics": {
-        "average_bb_area": avg_bb_area,
-        "average_distance_from_camera": avg_distance,
+export_json.append(
+    {
+        "statistics": {
+            "average_bb_area": avg_bb_area,
+            "average_distance_from_camera": avg_distance,
+        }
     }
-})
+)
 
 
 load_and_merge_previous_data(export_json)
 
 print("------- finished -------")
-print(f'total counts: {count_dict}')
+print(f"total counts: {count_dict}")
