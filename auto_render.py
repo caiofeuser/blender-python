@@ -603,23 +603,20 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
     bpy.context.view_layer.update()
 
     furtherst_point = 0
+    had_and_occluder_object = False
     for obj in current_scene_objects:
         bbox = get_2d_bounding_box(cam=camera, obj=obj, scene=scene)
 
         if len(current_scene_objects) > 1:
             visibility_ratio = check_visibility_raycast(obj, camera, scene)
 
-        # If less than 20% of the object is visible, kill the label.
         if not bbox:
             continue
 
-        # 2. Check Visibility (Raycast)
-        # We run this unconditionally for every visible object
         visibility_ratio = check_visibility_raycast(obj, camera, scene)
 
-        # 3. Filter based on visibility
-        # If less than 20% of the object is visible, kill the label.
         if visibility_ratio < 0.2:
+            had_and_occluder_object = True
             bbox = None
             print(
                 f"Skipping {obj.name}: only {visibility_ratio*100:.1f}% visible (Occluded)."
@@ -699,7 +696,7 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
 
     file_name = f"scene-{uuid.uuid4()}.png"
     file_path = f"{RENDERS_PATH}/{file_name}"
-
+    had_and_occluder_object = False
     bpy.context.scene.render.filepath = file_path
     bpy.ops.render.render(write_still=True)
 
@@ -708,9 +705,11 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
         "file_path": file_path,
         "file_name": file_name,
         "bboxes": all_bb_data_for_this_image,
+        "quantity": len(all_bb_data_for_this_image),
+        "all_objects": [obj.name for obj in current_scene_objects],
     }
-
-    print(json.dumps(all_bb_data_for_this_image, indent=4))
+    if had_and_occluder_object:
+        print(json.dumps(bb_data, indent=4))
     export_json.append(bb_data)
 
     # 10. Clean up the scene for the next loop
