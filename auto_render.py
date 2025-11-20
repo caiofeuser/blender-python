@@ -11,14 +11,14 @@ import bpy
 from bpy_extras.object_utils import world_to_camera_view
 
 
-SAMPLES_NUMBER = 100  # number os samples to be generated
+SAMPLES_NUMBER = 250  # number os samples to be generated
 # x and y resolution
 X_RES = 640
 Y_RES = 480
 
 # number of background samples to be generated based on the total samples
 # BACKGROUND_SAMPLES = int(SAMPLES_NUMBER*0.005)
-BACKGROUND_SAMPLES = 2
+BACKGROUND_SAMPLES = 50
 
 IS_OCLUSSION_ENABLE = True  # occlusion toggle
 

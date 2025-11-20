@@ -8,6 +8,11 @@ labels/
 *.json
 *.png
 *.txt
+*.pt
+*.tflite
 __pycache__
+
+runs/
+dataset/
 
 !.gitkeep
