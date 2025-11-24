@@ -11,7 +11,7 @@ import bpy
 from bpy_extras.object_utils import world_to_camera_view
 
 
-SAMPLES_NUMBER = 250  # number os samples to be generated
+SAMPLES_NUMBER = 100  # number os samples to be generated
 # x and y resolution
 X_RES = 640
 Y_RES = 480
@@ -408,6 +408,47 @@ def check_visibility_raycast(obj, camera, scene, max_rays=100):
 
     return visible_points / total_points
 
+def create_random_lights(num_lights_to_add):
+    """
+    Creates a specified number of random Point or Area lights
+    in the scene and returns a list of them for later cleanup.
+    """
+    created_lights = []
+    for i in range(num_lights_to_add):
+        # Choose light type
+        light_type = random.choice(['POINT', 'AREA'])
+        light_data = bpy.data.lights.new(name=f"RandomLight_{i}", type=light_type)
+        
+        # Randomize power
+        if light_type == 'POINT':
+            light_data.energy = random.uniform(100, 1000) 
+        else: # AREA light
+            light_data.energy = random.uniform(100, 3000)
+            light_data.shape = 'SQUARE'
+            light_data.size = random.uniform(0.5, 3.0)
+
+        # Randomize color (slightly warm to slightly cool)
+        light_data.color = (
+            random.uniform(0.8, 1.0), 
+            random.uniform(0.8, 1.0), 
+            random.uniform(0.8, 1.0) 
+        )
+        
+        # Create the light object
+        light_object = bpy.data.objects.new(name=f"RandomLightObj_{i}", object_data=light_data)
+        
+        # Place it randomly in the scene (always above Z=2 to act as studio lights)
+        light_object.location = (
+            random.uniform(-10, 10), 
+            random.uniform(-10, 10), 
+            random.uniform(2, 10)    
+        )
+        
+        # Add to scene and our tracking list
+        scene.collection.objects.link(light_object)
+        created_lights.append(light_object)
+        
+    return created_lights
 
 background_node = nodes.new(type="ShaderNodeBackground")
 env_texture_node = nodes.new(type="ShaderNodeTexEnvironment")
@@ -437,287 +478,294 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
     bb_count = 0
     acc_bb_area = 0
     acc_distance = 0
+    try:
+        filteres_models = []
+        for models in all_model_files:
+            model_name = models.replace(".blend", "")
+            if count_dict[model_name] < SAMPLES_NUMBER:
+                filteres_models.append(models)
+        num_objects = random.gauss(3, 2)
+        # num_objects = 5  # remove later
 
-    filteres_models = []
-    for models in all_model_files:
-        model_name = models.replace(".blend", "")
-        if count_dict[model_name] < SAMPLES_NUMBER:
-            filteres_models.append(models)
-    num_objects = random.gauss(3, 2)
-    # num_objects = 5  # remove later
+        num_objects = max(1, int(num_objects))
+        num_objects = min(num_objects, 15)
+        num_objects = int(num_objects)
 
-    num_objects = max(1, int(num_objects))
-    num_objects = min(num_objects, 15)
-    num_objects = int(num_objects)
+        num_to_sample = min(num_objects, len(filteres_models))
+        models_to_load_paths = random.sample(filteres_models, num_to_sample)
 
-    num_to_sample = min(num_objects, len(filteres_models))
-    models_to_load_paths = random.sample(filteres_models, num_to_sample)
+        current_scene_objects = []  # Keep track of objects to delete later
+        all_bb_data_for_this_image = []  # Store all BBs for this one image
 
-    current_scene_objects = []  # Keep track of objects to delete later
-    all_bb_data_for_this_image = []  # Store all BBs for this one image
+        # 3. Load and place all chosen models
+        for model_file in models_to_load_paths:
+            filepath = os.path.join(MODELS_PATH, model_file)
 
-    # 3. Load and place all chosen models
-    for model_file in models_to_load_paths:
-        filepath = os.path.join(MODELS_PATH, model_file)
+            with bpy.data.libraries.load(filepath, link=False) as (data_from, data_to):
+                data_to.objects = [
+                    name for name in data_from.objects if bpy.data.objects.get(name) is None
+                ]
 
-        with bpy.data.libraries.load(filepath, link=False) as (data_from, data_to):
-            data_to.objects = [
-                name for name in data_from.objects if bpy.data.objects.get(name) is None
-            ]
+            all_dimensions = []
+            for obj in data_to.objects:
+                if obj and obj.type == "MESH":
+                    obj.scale = (0.066, 0.066, 0.066)
 
-        all_dimensions = []
-        for obj in data_to.objects:
-            if obj and obj.type == "MESH":
-                obj.scale = (0.066, 0.066, 0.066)
+                    is_position_safe = False
+                    attempts = 0
 
-                is_position_safe = False
-                attempts = 0
+                    while not is_position_safe and attempts < MAX_SPAWN_ATTEMPTS:
+                        attempts += 1
+                        is_position_safe = True  # Assume this spot is good
 
-                while not is_position_safe and attempts < MAX_SPAWN_ATTEMPTS:
-                    attempts += 1
-                    is_position_safe = True  # Assume this spot is good
-
-                    # 1. Get a new random trial position
-                    trial_location = (
-                        random.uniform(-10, 10),
-                        random.uniform(-10, 10),
-                        random.uniform(0, 5),
-                    )
-
-                    # 2. Check it against all previously placed objects
-                    for placed_obj in current_scene_objects:
-
-                        distance = (Vector(trial_location) - placed_obj.location).length
-
-                        if distance < MIN_SPAWN_DISTANCE:
-                            is_position_safe = False  # This spot is too close
-                            break  # Stop checking, try a new spot
-
-                    # 3. If we looped all objects and it's still safe, we're done
-                    if is_position_safe:
-                        obj.location = trial_location
-                        obj.rotation_euler = (
-                            random.uniform(0, 2 * math.pi),
-                            random.uniform(0, 2 * math.pi),
-                            random.uniform(0, 2 * math.pi),
+                        # 1. Get a new random trial position
+                        trial_location = (
+                            random.uniform(-10, 10),
+                            random.uniform(-10, 10),
+                            random.uniform(0, 5),
                         )
-                        scene.collection.objects.link(obj)
-                        current_scene_objects.append(obj)
-                        all_dimensions.append(obj.dimensions)
-                        break  # Exit the 'while' loop
 
-                if not is_position_safe:
-                    print(
-                        f"Warning: Could not find clear spot for {obj.name}. Skipping it."
-                    )
+                        # 2. Check it against all previously placed objects
+                        for placed_obj in current_scene_objects:
 
-                    bpy.data.objects.remove(obj, do_unlink=True)
+                            distance = (Vector(trial_location) - placed_obj.location).length
 
-    if not current_scene_objects:
-        print("No models were loaded for this scene. Skipping.")
-        continue
+                            if distance < MIN_SPAWN_DISTANCE:
+                                is_position_safe = False  # This spot is too close
+                                break  # Stop checking, try a new spot
 
-    # 4. Set up Camera
-    # Create or get an Empty at the origin
-    if "SceneCenter" not in bpy.data.objects:
-        bpy.ops.object.empty_add(location=(0, 0, 0))
-        bpy.context.active_object.name = "SceneCenter"
-    scene_center = bpy.data.objects["SceneCenter"]
+                        # 3. If we looped all objects and it's still safe, we're done
+                        if is_position_safe:
+                            obj.location = trial_location
+                            obj.rotation_euler = (
+                                random.uniform(0, 2 * math.pi),
+                                random.uniform(0, 2 * math.pi),
+                                random.uniform(0, 2 * math.pi),
+                            )
+                            scene.collection.objects.link(obj)
+                            current_scene_objects.append(obj)
+                            all_dimensions.append(obj.dimensions)
+                            break  # Exit the 'while' loop
 
-    avg_location = Vector((0, 0, 0))
-    for obj in current_scene_objects:
-        avg_location += obj.location
-    avg_location /= len(current_scene_objects)
+                    if not is_position_safe:
+                        print(
+                            f"Warning: Could not find clear spot for {obj.name}. Skipping it."
+                        )
 
-    # 2. Move our "SceneCenter" Empty to that new average location
-    scene_center.location = avg_location
+                        bpy.data.objects.remove(obj, do_unlink=True)
 
-    # 3. Calculate the "bounding box" of the *entire cluster*
-    all_locations = [obj.location for obj in current_scene_objects]
-    min_x = min(loc.x for loc in all_locations)
-    max_x = max(loc.x for loc in all_locations)
-    min_y = min(loc.y for loc in all_locations)
-    max_y = max(loc.y for loc in all_locations)
+        if not current_scene_objects:
+            print("No models were loaded for this scene. Skipping.")
+            continue
 
-    # Get the largest dimension of the spawn area
-    cluster_width = max_x - min_x
-    cluster_height = max_y - min_y
-    max_cluster_dimension = max(cluster_width, cluster_height)
+        # 4. Set up Camera
+        # Create or get an Empty at the origin
+        if "SceneCenter" not in bpy.data.objects:
+            bpy.ops.object.empty_add(location=(0, 0, 0))
+            bpy.context.active_object.name = "SceneCenter"
+        scene_center = bpy.data.objects["SceneCenter"]
 
-    # Add the size of the first object as a buffer
-    # This prevents the camera from clipping if there's only one object
-    max_cluster_dimension += max(current_scene_objects[0].dimensions)
+        avg_location = Vector((0, 0, 0))
+        for obj in current_scene_objects:
+            avg_location += obj.location
+        avg_location /= len(current_scene_objects)
 
-    camera.constraints.clear()
-    camera.constraints.new(type="TRACK_TO")
-    camera.constraints["Track To"].target = scene_center
-    camera.constraints["Track To"].track_axis = "TRACK_NEGATIVE_Z"
-    camera.constraints["Track To"].up_axis = "UP_Y"
+        # 2. Move our "SceneCenter" Empty to that new average location
+        scene_center.location = avg_location
 
-    bpy.context.view_layer.update()
-    object_dimens = current_scene_objects[0].dimensions
+        # 3. Calculate the "bounding box" of the entire cluster
+        all_locations = [obj.location for obj in current_scene_objects]
+        min_x = min(loc.x for loc in all_locations)
+        max_x = max(loc.x for loc in all_locations)
+        min_y = min(loc.y for loc in all_locations)
+        max_y = max(loc.y for loc in all_locations)
 
-    distance = camera_positioning()  # Your function should now work fine
-    bpy.context.view_layer.update()
+        # Get the largest dimension of the spawn area
+        cluster_width = max_x - min_x
+        cluster_height = max_y - min_y
+        max_cluster_dimension = max(cluster_width, cluster_height)
 
-    bpy.context.view_layer.update()
-    furtherst_point = 0
-    camera_location = camera.location
-    for obj in current_scene_objects:
-        distance = (obj.location - camera_location).length
-        if distance > furtherst_point:
-            furtherst_point = distance
+        # Add the size of the first object as a buffer
+        # This prevents the camera from clipping if there's only one object
+        max_cluster_dimension += max(current_scene_objects[0].dimensions)
 
-    # 5. Set up Lighting
-    # We need to find a shader_node, let's just use the first object's
-    mat = current_scene_objects[0].material_slots[0].material
-    shader_node = mat.node_tree.nodes.get("Principled BSDF")
-    setup_background_and_randomization(background_node, shader_node)
-    mapping_node.inputs["Rotation"].default_value[2] = random.uniform(0, math.pi * 2)
+        camera.constraints.clear()
+        camera.constraints.new(type="TRACK_TO")
+        camera.constraints["Track To"].target = scene_center
+        camera.constraints["Track To"].track_axis = "TRACK_NEGATIVE_Z"
+        camera.constraints["Track To"].up_axis = "UP_Y"
 
-    # 6. Set up Occluder (This logic can be mostly the same)
-    occluder = None
-    max_dimentsion = max(object_dimens)
-    if IS_OCLUSSION_ENABLE:
-        occluder = create_random_occluder()
-        occluder.hide_render = True
-        occluder.hide_viewport = True
+        bpy.context.view_layer.update()
+        object_dimens = current_scene_objects[0].dimensions
 
-        if random.uniform(0, 1) > 0.5:
-            occluder.hide_render = False
-            occluder.hide_viewport = False
-            jitter_camera_occluder_position(
-                occluder, camera, scene_center, max_cluster_dimension
-            )
+        distance = camera_positioning()  # Your function should now work fine
+        bpy.context.view_layer.update()
 
-            occ_size = max_dimentsion * random.uniform(0.2, 0.7)
+        active_scene_lights = create_random_lights(random.randint(1,3))
+            
+        bpy.context.view_layer.update()
+        furtherst_point = 0
+        camera_location = camera.location
+        for obj in current_scene_objects:
+            distance = (obj.location - camera_location).length
+            if distance > furtherst_point:
+                furtherst_point = distance
 
-            # Set scale. We set Z scale to something small but non-zero
-            # if it's a cube/sphere, or 1 if it's a plane.
-            if occluder.data.name == "Plane":
-                occluder.scale = (occ_size, occ_size, 1)
-            else:
-                # Make it a box/sphere
-                occluder.scale = (occ_size, occ_size, occ_size * 0.5)
+        # 5. Set up Lighting
+        # We need to find a shader_node, let's just use the first object's
+        mat = current_scene_objects[0].material_slots[0].material
+        shader_node = mat.node_tree.nodes.get("Principled BSDF")
+        setup_background_and_randomization(background_node, shader_node)
+        mapping_node.inputs["Rotation"].default_value[2] = random.uniform(0, math.pi * 2)
 
-    # 7. Get Bounding Boxes for ALL objects
-    bpy.context.view_layer.update()
+        # 6. Set up Occluder 
+        occluder = None
+        max_dimentsion = max(object_dimens)
+        if IS_OCLUSSION_ENABLE:
+            occluder = create_random_occluder()
+            occluder.hide_render = True
+            occluder.hide_viewport = True
 
-    furtherst_point = 0
-    had_and_occluder_object = False
-    for obj in current_scene_objects:
-        bbox = get_2d_bounding_box(cam=camera, obj=obj, scene=scene)
+            if random.uniform(0, 1) > 0.5:
+                occluder.hide_render = False
+                occluder.hide_viewport = False
+                jitter_camera_occluder_position(
+                    occluder, camera, scene_center, max_cluster_dimension
+                )
 
-        if len(current_scene_objects) > 1:
+                occ_size = max_dimentsion * random.uniform(0.2, 0.7)
+
+                # Set scale. We set Z scale to something small but non-zero
+                # if it's a cube/sphere, or 1 if it's a plane.
+                if occluder.data.name == "Plane":
+                    occluder.scale = (occ_size, occ_size, 1)
+                else:
+                    # Make it a box/sphere
+                    occluder.scale = (occ_size, occ_size, occ_size * 0.5)
+
+        # 7. Get Bounding Boxes for ALL objects
+        bpy.context.view_layer.update()
+
+        furtherst_point = 0
+        had_and_occluder_object = False
+        for obj in current_scene_objects:
+            bbox = get_2d_bounding_box(cam=camera, obj=obj, scene=scene)
+
+            if len(current_scene_objects) > 1:
+                visibility_ratio = check_visibility_raycast(obj, camera, scene)
+
+            if not bbox:
+                continue
+
             visibility_ratio = check_visibility_raycast(obj, camera, scene)
 
-        if not bbox:
-            continue
+            if visibility_ratio < 0.2:
+                had_and_occluder_object = True
+                bbox = None
+                print(
+                    f"Skipping {obj.name}: only {visibility_ratio*100:.1f}% visible (Occluded)."
+                )
+                continue 
 
-        visibility_ratio = check_visibility_raycast(obj, camera, scene)
+            # Check occlusion against the main occluder
+            occlusion_percentage = 0.0
+            if IS_OCLUSSION_ENABLE and not occluder.hide_render:
+                occlusion_percentage = calculate_occlusion(
+                    target=obj, occluder=occluder, cam=camera, scene=scene
+                )
 
-        if visibility_ratio < 0.2:
-            had_and_occluder_object = True
-            bbox = None
-            print(
-                f"Skipping {obj.name}: only {visibility_ratio*100:.1f}% visible (Occluded)."
-            )
-            continue  # Skip to next object immediately
+            # Skip if the conditions is aren't met
+            if occlusion_percentage > 0.75:
+                print(f"Skipping {obj.name}: {occlusion_percentage*100}% occluded.")
+                continue
 
-        # Check occlusion against the main occluder
-        occlusion_percentage = 0.0
-        if IS_OCLUSSION_ENABLE and not occluder.hide_render:
-            occlusion_percentage = calculate_occlusion(
-                target=obj, occluder=occluder, cam=camera, scene=scene
-            )
+            if any(cord < 0 for cord in bbox.values()):
+                print("Invalid, bounding box for {obj.name}, skipping.")
+                continue
 
-        # Skip if the conditions is aren't met
-        if occlusion_percentage > 0.75:
-            print(f"Skipping {obj.name}: {occlusion_percentage*100}% occluded.")
-            continue
+            height = bbox["max_y"] - bbox["min_y"]
+            width = bbox["max_x"] - bbox["min_x"]
+            area = width * height
 
-        if any(cord < 0 for cord in bbox.values()):
-            print("Invalid, bounding box for {obj.name}, skipping.")
-            continue
+            if area < 0.0002:
+                print(
+                    f"Invalid, bounding box too small, area = {area} for {obj.name}, skipping."
+                )
+                continue
 
-        height = bbox["max_y"] - bbox["min_y"]
-        width = bbox["max_x"] - bbox["min_x"]
-        area = width * height
+            # make all the bb in the same object per image
+            bb_data = {
+                "min_x": bbox["min_x"],
+                "max_x": bbox["max_x"],
+                "min_y": bbox["min_y"],
+                "max_y": bbox["max_y"],
+                "model_name": obj.name.split(".")[0],  # Clean up name
+                "distance_from_the_camera": (obj.location - camera.location).length,
+                "camera_set_to": distance,
+                "area": area,
+                "obj_location": {
+                    "x": obj.location.x,
+                    "y": obj.location.y,
+                    "z": obj.location.z,
+                },
+            }
 
-        if area < 0.0002:
-            print(
-                f"Invalid, bounding box too small, area = {area} for {obj.name}, skipping."
-            )
-            continue
+            bb_count = bb_count + 1
+            acc_bb_area = acc_bb_area + area
+            acc_distance = acc_distance + distance
 
-        # make all the bb in the same object per image
+            all_bb_data_for_this_image.append(bb_data)
+
+            distance = (obj.location - camera.location).length
+            if distance > furtherst_point:
+                furtherst_point = distance
+
+            model_name_clean = obj.name.split(".")[0]
+
+        # Check if it's a model we're tracking
+        if model_name_clean in count_dict:
+            count_dict[model_name_clean] += 1
+
+        bpy.data.cameras["Camera"].clip_end = furtherst_point + 30
+
+        # 8. Render the Scene
+        if not all_bb_data_for_this_image:
+            print("No objects were visible or passed occlusion. Skipping render.")
+
+        file_name = f"scene-{uuid.uuid4()}.png"
+        file_path = f"{RENDERS_PATH}/{file_name}"
+        had_and_occluder_object = False
+        bpy.context.scene.render.filepath = file_path
+        bpy.ops.render.render(write_still=True)
+
+        # 9. Save all BB data, pointing to the same file
         bb_data = {
-            "min_x": bbox["min_x"],
-            "max_x": bbox["max_x"],
-            "min_y": bbox["min_y"],
-            "max_y": bbox["max_y"],
-            "model_name": obj.name.split(".")[0],  # Clean up name
-            "distance_from_the_camera": (obj.location - camera.location).length,
-            "camera_set_to": distance,
-            "area": area,
-            "obj_location": {
-                "x": obj.location.x,
-                "y": obj.location.y,
-                "z": obj.location.z,
-            },
+            "file_path": file_path,
+            "file_name": file_name,
+            "bboxes": all_bb_data_for_this_image,
+            "quantity": len(all_bb_data_for_this_image),
+            "all_objects": [obj.name for obj in current_scene_objects],
         }
+        if had_and_occluder_object:
+            print(json.dumps(bb_data, indent=4))
+        export_json.append(bb_data)
 
-        bb_count = bb_count + 1
-        acc_bb_area = acc_bb_area + area
-        acc_distance = acc_distance + distance
-
-        all_bb_data_for_this_image.append(bb_data)
-
-        distance = (obj.location - camera.location).length
-        if distance > furtherst_point:
-            furtherst_point = distance
-
-        model_name_clean = obj.name.split(".")[0]
-
-    # Check if it's a model we're tracking
-    if model_name_clean in count_dict:
-        count_dict[model_name_clean] += 1
-
-    bpy.data.cameras["Camera"].clip_end = furtherst_point + 30
-
-    # 8. Render the Scene
-    if not all_bb_data_for_this_image:
-        print("No objects were visible or passed occlusion. Skipping render.")
-        # Cleanup and continue
+    finally:
+        print("Cleaning up the scene for the next render...")
+        # 1. Clean up Models
         for obj in current_scene_objects:
-            bpy.data.objects.remove(obj, do_unlink=True)
-        if occluder:
-            remove_occluder()
-        continue
-
-    file_name = f"scene-{uuid.uuid4()}.png"
-    file_path = f"{RENDERS_PATH}/{file_name}"
-    had_and_occluder_object = False
-    bpy.context.scene.render.filepath = file_path
-    bpy.ops.render.render(write_still=True)
-
-    # 9. Save all BB data, pointing to the same file
-    bb_data = {
-        "file_path": file_path,
-        "file_name": file_name,
-        "bboxes": all_bb_data_for_this_image,
-        "quantity": len(all_bb_data_for_this_image),
-        "all_objects": [obj.name for obj in current_scene_objects],
-    }
-    if had_and_occluder_object:
-        print(json.dumps(bb_data, indent=4))
-    export_json.append(bb_data)
-
-    # 10. Clean up the scene for the next loop
-    for obj in current_scene_objects:
-        bpy.data.objects.remove(obj, do_unlink=True)
-    if occluder:
-        remove_occluder()
+            if obj.name in bpy.data.objects: bpy.data.objects.remove(obj, do_unlink=True)
+        
+        # 2. Clean up Occluder
+        if occluder and occluder.name in bpy.data.objects:
+            bpy.data.objects.remove(occluder, do_unlink=True)
+            
+        # 3. Clean up Lights 
+        for light_obj in active_scene_lights:
+            if light_obj.name in bpy.data.objects:
+                light_data = light_obj.data
+                bpy.data.objects.remove(light_obj, do_unlink=True) # Remove Object
+                if light_data: bpy.data.lights.remove(light_data, do_unlink=True) # Remove Data
 
 
 # Generate pure background images so we prevent false positives during training
