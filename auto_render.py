@@ -351,7 +351,7 @@ def load_and_merge_previous_data(new_data):
         json.dump(export_json, f, indent=4)  # Added indent=4 for readability
 
 
-def check_visibility_raycast(obj, camera, scene, max_rays=20):
+def check_visibility_raycast(obj, camera, scene, max_rays=100):
     """
     Casts rays from the camera to random vertices of the object.
     Returns a visibility ratio (0.0 to 1.0).
@@ -365,6 +365,7 @@ def check_visibility_raycast(obj, camera, scene, max_rays=20):
     obj_eval = obj.evaluated_get(depsgraph)
     mesh = obj_eval.data
     matrix_world = obj.matrix_world
+    cam_loc = camera.location
 
     # optimization: Don't check every single vertex, just a sample
     num_vertices = len(mesh.vertices)
@@ -376,7 +377,6 @@ def check_visibility_raycast(obj, camera, scene, max_rays=20):
     visible_points = 0
     total_points = len(sample_indices)
 
-    cam_loc = camera.location
 
     for i in sample_indices:
         # Get global coordinate of the vertex
@@ -443,7 +443,6 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
         model_name = models.replace(".blend", "")
         if count_dict[model_name] < SAMPLES_NUMBER:
             filteres_models.append(models)
-
     num_objects = random.gauss(3, 2)
     # num_objects = 5  # remove later
 
@@ -582,9 +581,11 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
     if IS_OCLUSSION_ENABLE:
         occluder = create_random_occluder()
         occluder.hide_render = True
+        occluder.hide_viewport = True
 
         if random.uniform(0, 1) > 0.5:
             occluder.hide_render = False
+            occluder.hide_viewport = False
             jitter_camera_occluder_position(
                 occluder, camera, scene_center, max_cluster_dimension
             )
