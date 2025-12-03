@@ -11,14 +11,14 @@ import bpy
 from bpy_extras.object_utils import world_to_camera_view
 
 
-SAMPLES_NUMBER = 100  # number os samples to be generated
+SAMPLES_NUMBER = 5  # number os samples to be generated
 # x and y resolution
 X_RES = 640
 Y_RES = 480
 
 # number of background samples to be generated based on the total samples
 # BACKGROUND_SAMPLES = int(SAMPLES_NUMBER*0.005)
-BACKGROUND_SAMPLES = 50
+BACKGROUND_SAMPLES = 1
 
 IS_OCLUSSION_ENABLE = True  # occlusion toggle
 
@@ -32,7 +32,7 @@ RENDERS_PATH = f"{BASE_RENDERS_PATH}/renders_auto_{now}"
 # rendering settings
 
 USE_GPU = True  # GPU or CPU rendering
-CYCLES = 128  # number of cycles
+CYCLES = 512  # number of cycles
 ENGINE = "CYCLES"  # BLENDER_EEVEE_NEXT or CYCLES
 
 # multi object spawn settings
@@ -48,7 +48,7 @@ bpy.context.scene.cycles.device = "GPU" if USE_GPU else "CPU"
 bpy.context.scene.cycles.samples = CYCLES
 bpy.context.scene.render.resolution_x = X_RES
 bpy.context.scene.render.resolution_y = Y_RES
-bpy.context.scene.view_settings.look = "AgX - High Contrast"
+bpy.context.scene.view_settings.look = "AgX - Very High Contrast"
 
 
 # load a random background
@@ -99,7 +99,8 @@ def get_2d_bounding_box(obj, scene, cam):
         for axis in global_coordinates
     ]
 
-    visible_coordinates = [coord for coord in normalized_coordinates if coord.z > 0]
+    visible_coordinates = [
+        coord for coord in normalized_coordinates if coord.z > 0]
 
     on_screen_coordinates = [
         p
@@ -282,14 +283,16 @@ def camera_positioning(cluster_max_dimension=10):
 
 def setup_background_and_randomization(background_node, shader_node):
     # load random background
-    img_path = os.path.join(BACKGROUND_PATH, random.choice(filered_backgrounds))
+    img_path = os.path.join(
+        BACKGROUND_PATH, random.choice(filered_backgrounds))
     img = bpy.data.images.load(img_path)
     env_texture_node.image = img
 
     # light randomization
     background_node.inputs["Strength"].default_value = random.uniform(0.8, 2.5)
     # roughness randomization
-    shader_node.inputs["Subsurface Weight"].default_value = random.uniform(0.0, 0.05)
+    shader_node.inputs["Subsurface Weight"].default_value = random.uniform(
+        0.0, 0.05)
     shader_node.inputs["Roughness"].default_value = random.uniform(0.3, 0.5)
 
 
@@ -377,7 +380,6 @@ def check_visibility_raycast(obj, camera, scene, max_rays=100):
     visible_points = 0
     total_points = len(sample_indices)
 
-
     for i in sample_indices:
         # Get global coordinate of the vertex
         v_loc = matrix_world @ mesh.vertices[i].co
@@ -408,6 +410,122 @@ def check_visibility_raycast(obj, camera, scene, max_rays=100):
 
     return visible_points / total_points
 
+
+def randomize_material_advanced(obj):
+    """
+    Generates DARK, GRITTY, and INDUSTRIAL colors.
+    Eliminates pastel/candy colors by crushing the Value (Brightness).
+    """
+    if not obj.data.materials:
+        return
+
+    # --- 1. GENERATE DARK COLOR VALUES ---
+
+    # HUE: Random
+    h = random.random()
+
+    # SATURATION: 0.0 (Grey) to 0.7 (Rich Color).
+    # Avoids 0.8-1.0 which looks like "Candy/Neon".
+    s = random.random()
+
+    # VALUE (BRIGHTNESS): 0.05 (Almost Black) to 0.35 (Dark).
+    # CRITICAL: Keeping this below 0.5 prevents "Pastel" looks.
+    v = random.uniform(0.005, 0.2)
+
+    r, g, b = colorsys.hsv_to_rgb(h, s, v)
+    random_color = (r, g, b, 1.0)
+
+    # Metallic: Dark metal is very common in industrial datasets
+    if random.random() > 0.7:
+        random_metallic = random.uniform(0.7, 1.0)
+    else:
+        random_metallic = 0.0
+
+    # Noise/Grunge Params
+    noise_scale = random.uniform(5.0, 40.0)
+
+    # Roughness: Dark objects shouldn't be perfect mirrors, or they look grey.
+    # We want matte darks or semi-glossy darks.
+    rough_min = random.uniform(0.3, 0.6)
+    rough_max = random.uniform(rough_min, 0.9)
+
+    # --- 2. APPLY TO NODES ---
+    for mat in obj.data.materials:
+        if not mat or not mat.use_nodes:
+            continue
+
+        nodes = mat.node_tree.nodes
+        links = mat.node_tree.links
+
+        bsdf = next((n for n in nodes if n.type == 'BSDF_PRINCIPLED'), None)
+        if not bsdf:
+            continue
+
+        base_color_socket = bsdf.inputs['Base Color']
+
+        # --- TEXTURE LOGIC (DARKENING) ---
+        if base_color_socket.is_linked:
+            link = base_color_socket.links[0]
+            prev_node = link.from_node
+
+            # Find or Create Mix Node
+            if prev_node.type == 'MIX_RGB' and prev_node.label == "AutoDarken":
+                mix_node = prev_node
+            else:
+                mix_node = nodes.new('ShaderNodeMixRGB')
+                mix_node.label = "AutoDarken"
+                mix_node.blend_type = 'MULTIPLY'
+                mix_node.location = (bsdf.location.x - 300, bsdf.location.y)
+
+                # Connect: Texture -> MixRGB(Color1) -> BSDF
+                prev_socket = link.from_socket
+                links.new(prev_socket, mix_node.inputs[1])
+                links.new(mix_node.outputs['Color'], base_color_socket)
+
+            # Apply the DARK color to Input 2
+            mix_node.inputs[2].default_value = random_color
+
+            # FORCE HIGH FACTOR: 0.85 to 1.0
+            # This ensures the texture gets heavily darkened by our color.
+            # If this is 0.5, a white texture will still look light grey (pastel).
+            mix_node.inputs['Fac'].default_value = random.uniform(0.85, 1.0)
+
+        # --- FLAT COLOR LOGIC ---
+        else:
+            base_color_socket.default_value = random_color
+
+        # --- METALLIC & ROUGHNESS ---
+        bsdf.inputs['Metallic'].default_value = random_metallic
+
+        # Grunge Setup (Noise -> Roughness)
+        noise_tex = nodes.get("RandomNoise")
+        if not noise_tex:
+            noise_tex = nodes.new('ShaderNodeTexNoise')
+            noise_tex.name = "RandomNoise"
+            noise_tex.location = (bsdf.location.x - 600, bsdf.location.y - 200)
+
+        color_ramp = nodes.get("RandomRamp")
+        if not color_ramp:
+            color_ramp = nodes.new('ShaderNodeValToRGB')
+            color_ramp.name = "RandomRamp"
+            color_ramp.location = (bsdf.location.x - 300,
+                                   bsdf.location.y - 200)
+            links.new(noise_tex.outputs['Fac'], color_ramp.inputs['Fac'])
+            links.new(color_ramp.outputs['Color'], bsdf.inputs['Roughness'])
+
+        noise_tex.inputs['Scale'].default_value = noise_scale
+
+        # Set Roughness Ramp
+        # Being darker, we can afford slightly higher roughness to avoid "wet" look
+        color_ramp.color_ramp.elements[0].position = 0.0
+        color_ramp.color_ramp.elements[0].color = (
+            rough_min, rough_min, rough_min, 1)
+
+        color_ramp.color_ramp.elements[1].position = 1.0
+        color_ramp.color_ramp.elements[1].color = (
+            rough_max, rough_max, rough_max, 1)
+
+
 def create_random_lights(num_lights_to_add):
     """
     Creates a specified number of random Point or Area lights
@@ -417,38 +535,41 @@ def create_random_lights(num_lights_to_add):
     for i in range(num_lights_to_add):
         # Choose light type
         light_type = random.choice(['POINT', 'AREA'])
-        light_data = bpy.data.lights.new(name=f"RandomLight_{i}", type=light_type)
-        
+        light_data = bpy.data.lights.new(
+            name=f"RandomLight_{i}", type=light_type)
+
         # Randomize power
         if light_type == 'POINT':
-            light_data.energy = random.uniform(100, 1000) 
-        else: # AREA light
+            light_data.energy = random.uniform(100, 1000)
+        else:  # AREA light
             light_data.energy = random.uniform(100, 3000)
             light_data.shape = 'SQUARE'
             light_data.size = random.uniform(0.5, 3.0)
 
         # Randomize color (slightly warm to slightly cool)
         light_data.color = (
-            random.uniform(0.8, 1.0), 
-            random.uniform(0.8, 1.0), 
-            random.uniform(0.8, 1.0) 
+            random.uniform(0.8, 1.0),
+            random.uniform(0.8, 1.0),
+            random.uniform(0.8, 1.0)
         )
-        
+
         # Create the light object
-        light_object = bpy.data.objects.new(name=f"RandomLightObj_{i}", object_data=light_data)
-        
+        light_object = bpy.data.objects.new(
+            name=f"RandomLightObj_{i}", object_data=light_data)
+
         # Place it randomly in the scene (always above Z=2 to act as studio lights)
         light_object.location = (
-            random.uniform(-10, 10), 
-            random.uniform(-10, 10), 
-            random.uniform(2, 10)    
+            random.uniform(-10, 10),
+            random.uniform(-10, 10),
+            random.uniform(2, 10)
         )
-        
+
         # Add to scene and our tracking list
         scene.collection.objects.link(light_object)
         created_lights.append(light_object)
-        
+
     return created_lights
+
 
 background_node = nodes.new(type="ShaderNodeBackground")
 env_texture_node = nodes.new(type="ShaderNodeTexEnvironment")
@@ -457,9 +578,12 @@ texture_node = nodes.new(type="ShaderNodeTexCoord")
 mapping_node = nodes.new(type="ShaderNodeMapping")
 
 # linking all the nodes
-node_tree.links.new(texture_node.outputs["Generated"], mapping_node.inputs["Vector"])
-node_tree.links.new(mapping_node.outputs["Vector"], env_texture_node.inputs["Vector"])
-node_tree.links.new(env_texture_node.outputs["Color"], background_node.inputs["Color"])
+node_tree.links.new(
+    texture_node.outputs["Generated"], mapping_node.inputs["Vector"])
+node_tree.links.new(
+    mapping_node.outputs["Vector"], env_texture_node.inputs["Vector"])
+node_tree.links.new(
+    env_texture_node.outputs["Color"], background_node.inputs["Color"])
 node_tree.links.new(
     background_node.outputs["Background"], output_node.inputs["Surface"]
 )
@@ -528,7 +652,8 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
                         # 2. Check it against all previously placed objects
                         for placed_obj in current_scene_objects:
 
-                            distance = (Vector(trial_location) - placed_obj.location).length
+                            distance = (Vector(trial_location) -
+                                        placed_obj.location).length
 
                             if distance < MIN_SPAWN_DISTANCE:
                                 is_position_safe = False  # This spot is too close
@@ -545,6 +670,8 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
                             scene.collection.objects.link(obj)
                             current_scene_objects.append(obj)
                             all_dimensions.append(obj.dimensions)
+                            # randomize color and roughness
+                            randomize_material_advanced(obj)
                             break  # Exit the 'while' loop
 
                     if not is_position_safe:
@@ -601,8 +728,8 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
         distance = camera_positioning()  # Your function should now work fine
         bpy.context.view_layer.update()
 
-        active_scene_lights = create_random_lights(random.randint(1,3))
-            
+        active_scene_lights = create_random_lights(random.randint(1, 3))
+
         bpy.context.view_layer.update()
         furtherst_point = 0
         camera_location = camera.location
@@ -616,9 +743,10 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
         mat = current_scene_objects[0].material_slots[0].material
         shader_node = mat.node_tree.nodes.get("Principled BSDF")
         setup_background_and_randomization(background_node, shader_node)
-        mapping_node.inputs["Rotation"].default_value[2] = random.uniform(0, math.pi * 2)
+        mapping_node.inputs["Rotation"].default_value[2] = random.uniform(
+            0, math.pi * 2)
 
-        # 6. Set up Occluder 
+        # 6. Set up Occluder
         occluder = None
         max_dimentsion = max(object_dimens)
         if IS_OCLUSSION_ENABLE:
@@ -665,7 +793,7 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
                 print(
                     f"Skipping {obj.name}: only {visibility_ratio*100:.1f}% visible (Occluded)."
                 )
-                continue 
+                continue
 
             # Check occlusion against the main occluder
             occlusion_percentage = 0.0
@@ -676,7 +804,8 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
 
             # Skip if the conditions is aren't met
             if occlusion_percentage > 0.75:
-                print(f"Skipping {obj.name}: {occlusion_percentage*100}% occluded.")
+                print(
+                    f"Skipping {obj.name}: {occlusion_percentage*100}% occluded.")
                 continue
 
             if any(cord < 0 for cord in bbox.values()):
@@ -754,18 +883,22 @@ while min(count_dict.values()) < SAMPLES_NUMBER:
         print("Cleaning up the scene for the next render...")
         # 1. Clean up Models
         for obj in current_scene_objects:
-            if obj.name in bpy.data.objects: bpy.data.objects.remove(obj, do_unlink=True)
-        
+            if obj.name in bpy.data.objects:
+                bpy.data.objects.remove(obj, do_unlink=True)
+
         # 2. Clean up Occluder
         if occluder and occluder.name in bpy.data.objects:
             bpy.data.objects.remove(occluder, do_unlink=True)
-            
-        # 3. Clean up Lights 
+
+        # 3. Clean up Lights
         for light_obj in active_scene_lights:
             if light_obj.name in bpy.data.objects:
                 light_data = light_obj.data
-                bpy.data.objects.remove(light_obj, do_unlink=True) # Remove Object
-                if light_data: bpy.data.lights.remove(light_data, do_unlink=True) # Remove Data
+                bpy.data.objects.remove(
+                    light_obj, do_unlink=True)  # Remove Object
+                if light_data:
+                    bpy.data.lights.remove(
+                        light_data, do_unlink=True)  # Remove Data
 
 
 # Generate pure background images so we prevent false positives during training
@@ -777,7 +910,8 @@ for background_sample in range(0, BACKGROUND_SAMPLES):
     camera.rotation_euler[2] = random.uniform(0, 2 * math.pi)  # Z rotation
 
     # load random background
-    img_path = os.path.join(BACKGROUND_PATH, random.choice(filered_backgrounds))
+    img_path = os.path.join(
+        BACKGROUND_PATH, random.choice(filered_backgrounds))
     img = bpy.data.images.load(img_path)
     env_texture_node.image = img
 
