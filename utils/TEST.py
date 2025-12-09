@@ -2,14 +2,15 @@ import cv2
 import os
 
 # --- CONFIGURATION ---
-IMAGE_DIR = 'renders/renders_auto_20251124_163132' # Check your path
+IMAGE_DIR = 'renders/renders_auto_20251204_155601'  # Check your path
 LABEL_DIR = 'labels'
 # ---------------------
+
 
 def main():
     # 1. Gather all images first
     image_files = sorted([
-        f for f in os.listdir(IMAGE_DIR) 
+        f for f in os.listdir(IMAGE_DIR)
         if f.lower().endswith(('.png', '.jpg', '.jpeg'))
     ])
 
@@ -21,11 +22,12 @@ def main():
     print("CONTROLS: [D]=Next, [A]=Prev, [X]=DELETE, [Q]=Quit")
 
     index = 0
-    
+
     while index < len(image_files):
         img_file = image_files[index]
         img_path = os.path.join(IMAGE_DIR, img_file)
-        
+        print(
+            f"labels/{image_files[index].replace('.png', '.txt').replace('.jpg', '.txt').replace('.jpeg', '.txt')}")
         # Construct label path (supports .png -> .txt)
         label_file = os.path.splitext(img_file)[0] + '.txt'
         label_path = os.path.join(LABEL_DIR, label_file)
@@ -57,7 +59,7 @@ def main():
                     # y_center_px = n_yc * h
                     # width_px = n_w * w
                     # height_px = n_h * h
-                    
+
                     x1 = int((n_xc - n_w / 2) * w)
                     y1 = int((n_yc - n_h / 2) * h)
                     x2 = int((n_xc + n_w / 2) * w)
@@ -66,18 +68,20 @@ def main():
                     # Draw Box
                     cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
                     # Draw Class ID
-                    cv2.putText(img, f"ID: {class_id}", (x1, y1 - 10), 
+                    cv2.putText(img, f"ID: {class_id}", (x1, y1 - 10),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                     box_count += 1
         else:
             # No label file = Background image
-            cv2.putText(img, "BACKGROUND (No Label)", (50, 50), 
+            cv2.putText(img, "BACKGROUND (No Label)", (50, 50),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
         # --- UI Overlay ---
         info_text = f"[{index+1}/{len(image_files)}] {img_file} | Boxes: {box_count}"
-        cv2.putText(img, info_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 4) # Shadow
-        cv2.putText(img, info_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2) # Text
+        cv2.putText(img, info_text, (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 4)  # Shadow
+        cv2.putText(img, info_text, (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)  # Text
 
         # Show Image
         cv2.imshow('Dataset Cleaner', img)
@@ -85,36 +89,37 @@ def main():
         # --- Controls ---
         key = cv2.waitKey(0) & 0xFF
 
-        if key == ord('d') or key == 83: # 'd' or Right Arrow
+        if key == ord('d') or key == 83:  # 'd' or Right Arrow
             index += 1
-        
-        elif key == ord('a') or key == 81: # 'a' or Left Arrow
+
+        elif key == ord('a') or key == 81:  # 'a' or Left Arrow
             index = max(0, index - 1)
-        
-        elif key == ord('x'): # 'x' to DELETE
+
+        elif key == ord('x'):  # 'x' to DELETE
             print(f"🗑️ DELETING: {img_file}")
-            
+
             # 1. Delete Image
             if os.path.exists(img_path):
                 os.remove(img_path)
-            
+
             # 2. Delete Label
             if os.path.exists(label_path):
                 os.remove(label_path)
-            
+
             # 3. Remove from list so we don't see it again
             del image_files[index]
-            
+
             # Don't increment index (the next image slides into this slot)
             # Just check bounds
             if index >= len(image_files):
                 index = len(image_files) - 1
 
-        elif key == ord('q') or key == 27: # 'q' or ESC
+        elif key == ord('q') or key == 27:  # 'q' or ESC
             break
 
     cv2.destroyAllWindows()
     print("Cleaning finished.")
+
 
 if __name__ == "__main__":
     main()

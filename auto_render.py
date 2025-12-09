@@ -11,7 +11,7 @@ import bpy
 from bpy_extras.object_utils import world_to_camera_view
 
 
-SAMPLES_NUMBER = 5  # number os samples to be generated
+SAMPLES_NUMBER = 2  # number os samples to be generated
 # x and y resolution
 X_RES = 640
 Y_RES = 480
@@ -331,29 +331,6 @@ def jitter_camera_occluder_position(
     )
 
 
-def load_and_merge_previous_data(new_data):
-    prev_data = []
-    try:
-        with open("bb.json", "r") as f:
-            prev_data = json.load(f)
-            if not isinstance(prev_data, list):
-                prev_data = []
-
-        print(f"Loaded {len(prev_data)} previous bounding boxes.")
-
-    except (FileNotFoundError, json.JSONDecodeError):
-        # This block runs if the file doesn't exist OR is empty/corrupted
-        print("bb.json not found or is empty. Starting a new one.")
-        prev_data = []
-
-    # --- The rest of your code is fine ---
-    print(f"Adding {len(export_json)} new bounding boxes.")
-    export_json.extend(prev_data)
-
-    with open("bb.json", "w") as f:
-        json.dump(export_json, f, indent=4)  # Added indent=4 for readability
-
-
 def check_visibility_raycast(obj, camera, scene, max_rays=100):
     """
     Casts rays from the camera to random vertices of the object.
@@ -569,6 +546,14 @@ def create_random_lights(num_lights_to_add):
         created_lights.append(light_object)
 
     return created_lights
+
+
+def save_bboxes(new_data):
+    os.makedirs('bboxes', exist_ok=True)
+    path = f'bboxes/renders_auto_{now}.json'
+
+    with open(path, 'w') as f:
+        json.dump(new_data, f, indent=4)
 
 
 background_node = nodes.new(type="ShaderNodeBackground")
@@ -949,7 +934,7 @@ export_json.append(
 )
 
 
-load_and_merge_previous_data(export_json)
+save_bboxes(export_json)
 
 print("------- finished -------")
 print(f"total counts: {count_dict}")

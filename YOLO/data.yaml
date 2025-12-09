@@ -4,8 +4,7 @@ train: images/train
 val: images/val
 
 names:
-  0: armleft
-  1: armright
-  2: base
-  3: head
-  4: spacer
+  0: arm
+  1: base
+  2: head
+  3: spacer
