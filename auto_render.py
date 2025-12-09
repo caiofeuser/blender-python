@@ -401,32 +401,16 @@ def randomize_material_advanced(obj):
     # HUE: Random
     h = random.random()
 
-    # SATURATION: 0.0 (Grey) to 0.7 (Rich Color).
-    # Avoids 0.8-1.0 which looks like "Candy/Neon".
+    # SATURATION:
     s = random.random()
 
-    # VALUE (BRIGHTNESS): 0.05 (Almost Black) to 0.35 (Dark).
-    # CRITICAL: Keeping this below 0.5 prevents "Pastel" looks.
-    v = random.uniform(0.005, 0.2)
+    # VALUE (BRIGHTNESS)
+    v = random.uniform(0.005, 0.17)
 
     r, g, b = colorsys.hsv_to_rgb(h, s, v)
     random_color = (r, g, b, 1.0)
 
-    # Metallic: Dark metal is very common in industrial datasets
-    if random.random() > 0.7:
-        random_metallic = random.uniform(0.7, 1.0)
-    else:
-        random_metallic = 0.0
-
-    # Noise/Grunge Params
-    noise_scale = random.uniform(5.0, 40.0)
-
-    # Roughness: Dark objects shouldn't be perfect mirrors, or they look grey.
-    # We want matte darks or semi-glossy darks.
-    rough_min = random.uniform(0.3, 0.6)
-    rough_max = random.uniform(rough_min, 0.9)
-
-    # --- 2. APPLY TO NODES ---
+    # --- 2. APPLY TO ALL MATERIALS ---
     for mat in obj.data.materials:
         if not mat or not mat.use_nodes:
             continue
@@ -434,79 +418,26 @@ def randomize_material_advanced(obj):
         nodes = mat.node_tree.nodes
         links = mat.node_tree.links
 
+        # Find Principled BSDF
         bsdf = next((n for n in nodes if n.type == 'BSDF_PRINCIPLED'), None)
         if not bsdf:
             continue
 
+        # --- FORCE SOLID COLOR ---
+        # If there is a texture connected, remove it so our color works
         base_color_socket = bsdf.inputs['Base Color']
-
-        # --- TEXTURE LOGIC (DARKENING) ---
         if base_color_socket.is_linked:
-            link = base_color_socket.links[0]
-            prev_node = link.from_node
+            for link in base_color_socket.links:
+                links.remove(link)
 
-            # Find or Create Mix Node
-            if prev_node.type == 'MIX_RGB' and prev_node.label == "AutoDarken":
-                mix_node = prev_node
-            else:
-                mix_node = nodes.new('ShaderNodeMixRGB')
-                mix_node.label = "AutoDarken"
-                mix_node.blend_type = 'MULTIPLY'
-                mix_node.location = (bsdf.location.x - 300, bsdf.location.y)
-
-                # Connect: Texture -> MixRGB(Color1) -> BSDF
-                prev_socket = link.from_socket
-                links.new(prev_socket, mix_node.inputs[1])
-                links.new(mix_node.outputs['Color'], base_color_socket)
-
-            # Apply the DARK color to Input 2
-            mix_node.inputs[2].default_value = random_color
-
-            # FORCE HIGH FACTOR: 0.85 to 1.0
-            # This ensures the texture gets heavily darkened by our color.
-            # If this is 0.5, a white texture will still look light grey (pastel).
-            mix_node.inputs['Fac'].default_value = random.uniform(0.85, 1.0)
-
-        # --- FLAT COLOR LOGIC ---
-        else:
-            base_color_socket.default_value = random_color
-
-        # --- METALLIC & ROUGHNESS ---
-        bsdf.inputs['Metallic'].default_value = random_metallic
-
-        # Grunge Setup (Noise -> Roughness)
-        noise_tex = nodes.get("RandomNoise")
-        if not noise_tex:
-            noise_tex = nodes.new('ShaderNodeTexNoise')
-            noise_tex.name = "RandomNoise"
-            noise_tex.location = (bsdf.location.x - 600, bsdf.location.y - 200)
-
-        color_ramp = nodes.get("RandomRamp")
-        if not color_ramp:
-            color_ramp = nodes.new('ShaderNodeValToRGB')
-            color_ramp.name = "RandomRamp"
-            color_ramp.location = (bsdf.location.x - 300,
-                                   bsdf.location.y - 200)
-            links.new(noise_tex.outputs['Fac'], color_ramp.inputs['Fac'])
-            links.new(color_ramp.outputs['Color'], bsdf.inputs['Roughness'])
-
-        noise_tex.inputs['Scale'].default_value = noise_scale
-
-        # Set Roughness Ramp
-        # Being darker, we can afford slightly higher roughness to avoid "wet" look
-        color_ramp.color_ramp.elements[0].position = 0.0
-        color_ramp.color_ramp.elements[0].color = (
-            rough_min, rough_min, rough_min, 1)
-
-        color_ramp.color_ramp.elements[1].position = 1.0
-        color_ramp.color_ramp.elements[1].color = (
-            rough_max, rough_max, rough_max, 1)
+        # Set the color
+        base_color_socket.default_value = random_color
 
 
 def create_random_lights(num_lights_to_add):
     """
     Creates a specified number of random Point or Area lights
-    in the scene and returns a list of them for later cleanup.
+    in the scene and returns a list of them forlater cleanup.
     """
     created_lights = []
     for i in range(num_lights_to_add):
